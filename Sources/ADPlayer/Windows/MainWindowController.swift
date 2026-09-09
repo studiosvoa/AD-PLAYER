@@ -5,7 +5,10 @@ final class MainWindowController: NSWindowController {
     private let toggleDisplayMode: () -> Void
 
     private var playlist: [PlaylistEntry] = []
+    private var visibleIndices: [Int] = []
+    private var displayFilterEnabled = false
     private var currentIndex: Int?
+    private var latestProgress: Double = 0
     private var loadedFolderURL: URL?
     private var autoRefreshTimer: Timer?
 
@@ -16,6 +19,8 @@ final class MainWindowController: NSWindowController {
     private let autoRefreshCheckbox = NSButton(checkboxWithTitle: "Auto", target: nil, action: nil)
     private let exportButton = NSButton(title: "Export", target: nil, action: nil)
     private let displayModeButton = NSButton(title: "Mode fenêtré", target: nil, action: nil)
+    private let stopButton = NSButton(title: "STOP", target: nil, action: nil)
+    private let filterCheckbox = NSButton(checkboxWithTitle: "Composés + images uniquement", target: nil, action: nil)
 
     private static let mediaColumnID = NSUserInterfaceItemIdentifier("media")
     private static let cellID = NSUserInterfaceItemIdentifier("mediaCell")
@@ -79,6 +84,15 @@ final class MainWindowController: NSWindowController {
         displayModeButton.action = #selector(displayModeButtonClicked)
         displayModeButton.translatesAutoresizingMaskIntoConstraints = false
 
+        stopButton.bezelStyle = .rounded
+        stopButton.target = self
+        stopButton.action = #selector(stopButtonClicked)
+        stopButton.translatesAutoresizingMaskIntoConstraints = false
+
+        filterCheckbox.target = self
+        filterCheckbox.action = #selector(filterToggled)
+        filterCheckbox.translatesAutoresizingMaskIntoConstraints = false
+
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
@@ -112,6 +126,8 @@ final class MainWindowController: NSWindowController {
         root.addSubview(autoRefreshCheckbox)
         root.addSubview(exportButton)
         root.addSubview(displayModeButton)
+        root.addSubview(stopButton)
+        root.addSubview(filterCheckbox)
         root.addSubview(scrollView)
         root.addSubview(statusBarSeparator)
         root.addSubview(statusLabel)
@@ -132,7 +148,13 @@ final class MainWindowController: NSWindowController {
             exportButton.centerYAnchor.constraint(equalTo: openButton.centerYAnchor),
             exportButton.trailingAnchor.constraint(equalTo: displayModeButton.leadingAnchor, constant: -8),
 
-            scrollView.topAnchor.constraint(equalTo: openButton.bottomAnchor, constant: 10),
+            stopButton.topAnchor.constraint(equalTo: openButton.bottomAnchor, constant: 8),
+            stopButton.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+
+            filterCheckbox.centerYAnchor.constraint(equalTo: stopButton.centerYAnchor),
+            filterCheckbox.leadingAnchor.constraint(equalTo: stopButton.trailingAnchor, constant: 12),
+
+            scrollView.topAnchor.constraint(equalTo: stopButton.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
             scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
             scrollView.bottomAnchor.constraint(equalTo: statusBarSeparator.topAnchor, constant: -8),
@@ -153,6 +175,33 @@ final class MainWindowController: NSWindowController {
         toggleDisplayMode()
     }
 
+    @objc private func stopButtonClicked() {
+        engine.stop()
+    }
+
+    @objc private func filterToggled() {
+        displayFilterEnabled = (filterCheckbox.state == .on)
+        recomputeVisibleIndices()
+        tableView.reloadData()
+        if let currentIndex = currentIndex, let visualRow = visibleIndices.firstIndex(of: currentIndex) {
+            tableView.selectRowIndexes(IndexSet(integer: visualRow), byExtendingSelection: false)
+        }
+    }
+
+    /// Filtered view keeps only paired (red) entries and .jpg/.jpeg images,
+    /// hiding plain unpaired video/audio files.
+    private func matchesDisplayFilter(_ entry: PlaylistEntry) -> Bool {
+        if entry.isPaired { return true }
+        if case .single(let item) = entry, item.type == .image { return true }
+        return false
+    }
+
+    private func recomputeVisibleIndices() {
+        visibleIndices = displayFilterEnabled
+            ? playlist.indices.filter { matchesDisplayFilter(playlist[$0]) }
+            : Array(playlist.indices)
+    }
+
     // MARK: - Folder loading
 
     @objc private func openButtonClicked() {
@@ -170,7 +219,9 @@ final class MainWindowController: NSWindowController {
     private func loadFolder(_ url: URL) {
         engine.stop()
         playlist = PlaylistEntry.buildEntries(fromFolder: url)
+        recomputeVisibleIndices()
         currentIndex = nil
+        latestProgress = 0
         loadedFolderURL = url
         statusLabel.stringValue = url.path
         tableView.reloadData()
@@ -207,12 +258,13 @@ final class MainWindowController: NSWindowController {
         guard newPlaylist.map(\.identityKey) != playlist.map(\.identityKey) else { return }
 
         playlist = newPlaylist
+        recomputeVisibleIndices()
         currentIndex = currentKey.flatMap { key in playlist.firstIndex { $0.identityKey == key } }
         engine.remapPlayingIndex(to: playingKey.flatMap { key in playlist.firstIndex { $0.identityKey == key } })
 
         tableView.reloadData()
-        if let currentIndex = currentIndex {
-            tableView.selectRowIndexes(IndexSet(integer: currentIndex), byExtendingSelection: false)
+        if let currentIndex = currentIndex, let visualRow = visibleIndices.firstIndex(of: currentIndex) {
+            tableView.selectRowIndexes(IndexSet(integer: visualRow), byExtendingSelection: false)
         } else {
             tableView.deselectAll(nil)
         }
@@ -268,15 +320,15 @@ final class MainWindowController: NSWindowController {
     @objc private func playButtonClicked(_ sender: NSButton) {
         let index = sender.tag
         guard playlist.indices.contains(index) else { return }
-        if tableView.selectedRow != index {
-            tableView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+        if let visualRow = visibleIndices.firstIndex(of: index), tableView.selectedRow != visualRow {
+            tableView.selectRowIndexes(IndexSet(integer: visualRow), byExtendingSelection: false)
         }
         engine.toggle(entry: playlist[index], at: index)
     }
 
     private func reloadRow(_ index: Int) {
-        guard playlist.indices.contains(index) else { return }
-        tableView.reloadData(forRowIndexes: IndexSet(integer: index), columnIndexes: IndexSet(integer: 0))
+        guard let visualRow = visibleIndices.firstIndex(of: index) else { return }
+        tableView.reloadData(forRowIndexes: IndexSet(integer: visualRow), columnIndexes: IndexSet(integer: 0))
     }
 }
 
@@ -284,11 +336,12 @@ final class MainWindowController: NSWindowController {
 
 extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
-        playlist.count
+        visibleIndices.count
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let entry = playlist[row]
+        let actualIndex = visibleIndices[row]
+        let entry = playlist[actualIndex]
 
         let cell: NSTableCellView
         if let reused = tableView.makeView(withIdentifier: Self.cellID, owner: self) as? NSTableCellView {
@@ -324,11 +377,26 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
         cell.textField?.stringValue = entry.displayName
 
         if let button = cell.subviews.compactMap({ $0 as? NSButton }).first {
-            let isThisRowPlaying = engine.playingIndex == row && engine.isPlaying
-            let symbolName = isThisRowPlaying ? "stop.fill" : "play.fill"
-            let description = isThisRowPlaying ? "Stop" : "Play"
+            let isThisRowPlaying = engine.playingIndex == actualIndex && engine.isPlaying
+            let isImageEntry: Bool = {
+                if case .single(let item) = entry, item.type == .image { return true }
+                return false
+            }()
+            let symbolName: String
+            let description: String
+            switch (isThisRowPlaying, isImageEntry) {
+            case (true, true):
+                symbolName = "stop.fill"
+                description = "Stop"
+            case (true, false):
+                symbolName = "pause.fill"
+                description = "Pause"
+            case (false, _):
+                symbolName = "play.fill"
+                description = "Play"
+            }
             button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: description)
-            button.tag = row
+            button.tag = actualIndex
             button.target = self
             button.action = #selector(playButtonClicked(_:))
         }
@@ -337,22 +405,26 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let actualIndex = visibleIndices[row]
         let rowView = HighlightRowView()
-        rowView.isCurrent = (row == currentIndex)
-        rowView.isPairedEntry = playlist[row].isPaired
+        rowView.isCurrent = (actualIndex == currentIndex)
+        rowView.isPairedEntry = playlist[actualIndex].isPaired
+        rowView.progress = (actualIndex == engine.playingIndex) ? CGFloat(latestProgress) : 0
         return rowView
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
         let previous = currentIndex
-        currentIndex = tableView.selectedRow >= 0 ? tableView.selectedRow : nil
-        if let previous = previous { reloadRowView(previous) }
-        if let current = currentIndex { reloadRowView(current) }
+        let selectedRow = tableView.selectedRow
+        currentIndex = (selectedRow >= 0 && visibleIndices.indices.contains(selectedRow)) ? visibleIndices[selectedRow] : nil
+        if let previous = previous { reloadRowView(forPlaylistIndex: previous) }
+        if let current = currentIndex { reloadRowView(forPlaylistIndex: current) }
     }
 
-    private func reloadRowView(_ row: Int) {
-        guard let rowView = tableView.rowView(atRow: row, makeIfNecessary: false) as? HighlightRowView else { return }
-        rowView.isCurrent = (row == currentIndex)
+    private func reloadRowView(forPlaylistIndex index: Int) {
+        guard let visualRow = visibleIndices.firstIndex(of: index),
+              let rowView = tableView.rowView(atRow: visualRow, makeIfNecessary: false) as? HighlightRowView else { return }
+        rowView.isCurrent = (index == currentIndex)
     }
 }
 
@@ -363,5 +435,12 @@ extension MainWindowController: PlaybackEngineDelegate {
         if let index = index {
             reloadRow(index)
         }
+    }
+
+    func playbackEngine(_ engine: PlaybackEngine, didUpdateProgress progress: Double, for index: Int) {
+        latestProgress = progress
+        guard let visualRow = visibleIndices.firstIndex(of: index),
+              let rowView = tableView.rowView(atRow: visualRow, makeIfNecessary: false) as? HighlightRowView else { return }
+        rowView.progress = CGFloat(progress)
     }
 }

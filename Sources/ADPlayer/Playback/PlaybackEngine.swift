@@ -4,6 +4,8 @@ import AVFoundation
 protocol PlaybackEngineDelegate: AnyObject {
     /// Fired whenever the playing/paused state of `index` changes (including becoming nil/stopped).
     func playbackEngine(_ engine: PlaybackEngine, didUpdateIndex index: Int?)
+    /// Fired as playback advances; `progress` is 0...1 (fraction of duration elapsed).
+    func playbackEngine(_ engine: PlaybackEngine, didUpdateProgress progress: Double, for index: Int)
 }
 
 /// Single-stream playback state machine: only one media item can be
@@ -18,6 +20,7 @@ final class PlaybackEngine: NSObject {
 
     private var player: AVPlayer?
     private var endObserver: NSObjectProtocol?
+    private var timeObserverToken: Any?
 
     /// Click on a row's PLAY/STOP button, or SPACE on the selected row.
     func toggle(entry: PlaylistEntry, at index: Int) {
@@ -49,6 +52,7 @@ final class PlaybackEngine: NSObject {
                 player = newPlayer
                 previewView?.showVideo(player: newPlayer)
                 observeEnd(of: newPlayer, index: index)
+                observeProgress(of: newPlayer, index: index)
                 newPlayer.play()
                 isPlaying = true
             }
@@ -59,6 +63,7 @@ final class PlaybackEngine: NSObject {
             player = newPlayer
             previewView?.showVideo(player: newPlayer)
             observeEnd(of: newPlayer, index: index)
+            observeProgress(of: newPlayer, index: index)
             newPlayer.play()
             isPlaying = true
         }
@@ -91,6 +96,10 @@ final class PlaybackEngine: NSObject {
             NotificationCenter.default.removeObserver(endObserver)
             self.endObserver = nil
         }
+        if let token = timeObserverToken {
+            player?.removeTimeObserver(token)
+            timeObserverToken = nil
+        }
         player?.pause()
         player = nil
         previewView?.showBlack()
@@ -98,8 +107,18 @@ final class PlaybackEngine: NSObject {
         let previous = playingIndex
         playingIndex = nil
         isPlaying = false
-        if previous != nil {
+        if let previous = previous {
             delegate?.playbackEngine(self, didUpdateIndex: previous)
+            delegate?.playbackEngine(self, didUpdateProgress: 0, for: previous)
+        }
+    }
+
+    private func observeProgress(of player: AVPlayer, index: Int) {
+        let interval = CMTime(seconds: 0.1, preferredTimescale: 600)
+        timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+            guard let self = self, let duration = player.currentItem?.duration, duration.seconds > 0 else { return }
+            let fraction = max(0, min(1, time.seconds / duration.seconds))
+            self.delegate?.playbackEngine(self, didUpdateProgress: fraction, for: index)
         }
     }
 
@@ -109,7 +128,9 @@ final class PlaybackEngine: NSObject {
             object: player.currentItem,
             queue: .main
         ) { [weak self] _ in
-            self?.stop()
+            guard let self = self else { return }
+            self.delegate?.playbackEngine(self, didUpdateProgress: 1.0, for: index)
+            self.stop()
         }
     }
 }
