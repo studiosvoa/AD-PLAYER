@@ -49,61 +49,106 @@ final class HelpWindowController: NSWindowController {
     private static let manualText = """
     AD-PLAYER — MODE D'EMPLOI
 
-    1. Charger des médias
+    1. Raccourcis clavier
 
-    Glissez-déposez des fichiers média ou un dossier dans la fenêtre Playlist.
-    Le raccourci Cmd-O ouvre le sélecteur de dossier. Le dernier dossier utilisé
-    est restauré au prochain lancement.
+    Cmd-O       Ouvre le sélecteur de dossier média.
+    Cmd-R       Ouvre le tiroir Réglages.
+    Échap       Déclenche le STOP d'urgence.
+    Espace      Lance, met en pause ou reprend le média sélectionné.
+    Cmd-Q       Quitte AD-PLAYER.
 
-    Les fichiers vidéo, audio et image sont affichés dans la playlist. Un fichier
-    vidéo et son fichier audio associé peuvent être regroupés automatiquement en
-    un duo.
+    2. Fenêtre Playlist
 
-    2. Lire un média
+    La fenêtre Playlist est le centre de contrôle de l'application. Elle liste
+    les vidéos, les audios et les images du dossier chargé. Une ligne contient
+    le nom du média, un bouton PLAY/PAUSE/STOP et un cercle d'état de lecture.
+    La bordure colorée et son remplissage indiquent le média actif et sa durée.
 
-    Cliquez sur le bouton PLAY d'une ligne pour lancer sa lecture. Le bouton
-    devient PAUSE pendant la lecture. Pour une image, le bouton devient STOP.
-    La barre colorée indique la progression du média en cours.
+    3. Charger des médias
 
-    Le bouton STOP général arrête la lecture et remet l'aperçu au noir.
-    La barre d'espace agit sur le média sélectionné.
+    Glissez-déposez des fichiers ou un dossier dans la fenêtre Playlist.
+    Vous pouvez aussi utiliser Cmd-O. Le dernier dossier utilisé est mémorisé
+    et restauré au prochain lancement. Clear list arrête la lecture, vide la
+    Playlist et oublie le dernier dossier chargé.
 
-    3. Suivi des médias
+    4. Les deux lignes de commandes
 
-    Le cercle situé à droite de chaque ligne devient vert lorsque le média a été
-    lu jusqu'à la fin. Cliquez sur ce cercle pour le remettre à l'état non lu.
-    Clear viewed efface tous les états lus. Clear list vide la playlist et oublie
-    le dernier dossier chargé.
+    Première ligne :
+    Refresh          Rescanne immédiatement le dossier chargé.
+    Auto-refresh     Actualise automatiquement la Playlist lorsque le dossier change.
+    Export           Ouvre le choix du dossier de destination, puis exporte
+                     chaque duo vidéo/audio en fichier MP4.
+    Mode fenêtré     Bascule Preview entre plein écran et fenêtre normale.
 
-    4. Filtres et actualisation
+    Deuxième ligne :
+    Filtrer Duos     Affiche les duos et les images autonomes.
+    Amorce titrée    Affiche le nom du média avant une vidéo ou un duo.
+    Audio seul compris
+                     Autorise le nom des MP3/WAV seuls dans l'amorce.
+    Normaliser le LUFS
+                     Active la correction de niveau pendant la lecture.
+    Clear viewed     Remet tous les cercles verts à l'état non lu.
+    Clear list       Vide la Playlist et efface son dossier mémorisé.
 
-    Filtrer Duos affiche uniquement les duos et les images autonomes.
-    Auto-refresh surveille le dossier chargé et actualise la playlist.
-    Refresh lance une actualisation immédiate.
+    Le gros bouton STOP du tiroir Réglages arrête immédiatement la lecture.
+    Il est centré sous les réglages et possède un cadre rouge pour être repéré
+    rapidement. Échap déclenche la même commande.
 
-    5. Réglages
+    5. Nommer les duos
 
-    Ouvrez Réglages depuis le menu AD-PLAYER, ou avec Cmd-R. Le tiroir reste
-    utilisable sans bloquer la fenêtre Playlist.
+    Pour créer un duo, placez dans le même dossier une vidéo et un audio qui
+    partagent exactement le même nom de base, avant leur extension.
 
-    Amorce titrée affiche le nom avant les vidéos. Afficher le titre des médias
-    audio fait de même pour les fichiers MP3 et WAV autonomes.
-    Les durées de titre, de noir et de fondu sont réglables. La normalisation
-    ajuste le niveau vers la cible LUFS choisie.
+    Exemple :
+    A0.mov
+    A0.wav
 
-    Passer automatiquement au clip suivant non lu sélectionne le prochain média
-    non lu sans le lancer. Lancer automatiquement les clips pour une lecture
-    continue enchaîne les médias dans l'ordre de la playlist.
+    Ces deux fichiers sont regroupés en une seule ligne. Le fichier vidéo fournit
+    l'image et le fichier audio fournit la bande sonore. Les extensions prises en
+    charge sont MP4, MOV, WAV, MP3, JPG, JPEG et PNG.
 
-    6. Fenêtre Preview
+    6. Commandes de lecture
 
-    Preview s'ouvre par défaut en plein écran. Le bouton Mode fenêtré permet de
-    basculer vers une fenêtre normale sur le même écran. Le menu Fenêtre permet
-    de rappeler Playlist ou Preview au premier plan.
+    Cliquez sur PLAY pour lancer un média. Le bouton devient PAUSE pendant la
+    lecture. Pour une image, il devient STOP. Lancer un autre média arrête le
+    précédent avant de commencer le nouveau.
 
-    7. Export
+    Le cercle à droite devient vert lorsque le média est lu jusqu'à la fin.
+    Cliquez dessus pour le repasser manuellement à l'état non lu.
 
-    Export crée un fichier MP4 pour chaque duo vidéo/audio de la playlist, dans
-    le dossier choisi. La normalisation active est appliquée à l'export.
+    Pour un audio seul, Preview affiche une barre de progression horizontale.
+    Pour une image ou une vidéo, le fondu visuel suit la valeur réglée dans le
+    tiroir Réglages. L'audio suit également une rampe de volume.
+
+    7. Réglages
+
+    Ouvrez le tiroir avec le bouton engrenage situé sur la fenêtre Playlist,
+    le menu AD-PLAYER > Réglages… ou Cmd-R. Le bouton Fermer referme le tiroir.
+    Le tiroir reste non modal : la Playlist reste utilisable pendant les réglages.
+
+    Durée du titre       Durée de l'amorce, de 0,3 à 5,0 secondes.
+    Noir suivant          Durée du noir après le titre, de 0,5 à 2,0 secondes.
+    Cible LUFS            Niveau cible, de -25 à -13 LUFS.
+    Fondu au noir         Fondu des médias, de 0,0 à 2,0 secondes.
+    Style                 Clair, Sombre ou Système.
+
+    Le fondu des titres est fixe à 0,5 seconde. Le réglage Fondu au noir ne
+    concerne que les médias et reste indépendant de l'amorce.
+
+    Sélectionner automatiquement le clip non lu suivant sélectionne le prochain
+    média non lu sans lancer sa lecture.
+
+    Lancer automatiquement les clips pour une lecture continue enchaîne les
+    médias. Le menu Mode permet alors de choisir Ignorer les clips déjà lus ou
+    Lire tous les clips. Tous ces réglages sont mémorisés après fermeture.
+
+    8. Fenêtre Preview et export
+
+    Preview s'ouvre par défaut en plein écran. Mode fenêtré conserve l'écran
+    courant. Le menu Fenêtre rappelle Playlist ou Preview au premier plan.
+
+    Export ouvre d'abord un sélecteur de dossier. Après validation, un MP4 est
+    créé pour chaque duo vidéo/audio dans le dossier choisi. La normalisation
+    active est appliquée à l'export.
     """
 }

@@ -171,18 +171,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buttons.alignment = .centerY
         buttons.translatesAutoresizingMaskIntoConstraints = false
 
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 285))
+        let emergencyStopButton = mainWindowController.emergencyStopButton()
+        emergencyStopButton.translatesAutoresizingMaskIntoConstraints = false
+
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 390))
         content.addSubview(stack)
+        content.addSubview(emergencyStopButton)
         content.addSubview(buttons)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
+            emergencyStopButton.topAnchor.constraint(equalTo: stack.bottomAnchor, constant: 28),
+            emergencyStopButton.centerXAnchor.constraint(equalTo: content.centerXAnchor),
+            emergencyStopButton.widthAnchor.constraint(equalToConstant: 88),
+            emergencyStopButton.heightAnchor.constraint(equalToConstant: 72),
             buttons.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
+            buttons.topAnchor.constraint(greaterThanOrEqualTo: emergencyStopButton.bottomAnchor, constant: 18),
             buttons.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -16)
         ])
 
-        let drawer = NSDrawer(contentSize: NSSize(width: 460, height: 285), preferredEdge: .maxX)
+        let drawer = NSDrawer(contentSize: NSSize(width: 460, height: 390), preferredEdge: .maxX)
         drawer.contentView = content
         drawer.parentWindow = mainWindowController.window
         settingsDrawer = drawer

@@ -4,7 +4,6 @@ final class MainWindowController: NSWindowController {
     private let engine: PlaybackEngine
     private let toggleDisplayMode: () -> Void
     private let openSettings: () -> Void
-    private var emergencyStopPanel: NSPanel?
 
     private var playlist: [PlaylistEntry] = []
     private var visibleIndices: [Int] = []
@@ -17,6 +16,7 @@ final class MainWindowController: NSWindowController {
     private let lastPlaylistURLKey = "ADPlayer.lastPlaylistURL"
     private let playedEntriesKey = "ADPlayer.playedEntries"
     private var playedEntryKeys = Set<String>()
+    private var automaticTransitionScheduledForIndex: Int?
 
     var engineSettings: PlaybackSettings { engine.settings }
     var isTitleCardEnabled: Bool { engine.showsTitleCardBeforePlayback }
@@ -56,10 +56,8 @@ final class MainWindowController: NSWindowController {
         window.minSize = NSSize(width: 360, height: 320)
         super.init(window: window)
         engine.delegate = self
-        window.delegate = self
         playedEntryKeys = Set(UserDefaults.standard.stringArray(forKey: playedEntriesKey) ?? [])
         buildUI()
-        buildEmergencyStopPanel()
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard event.keyCode == 53 else { return event }
             self?.stopButtonClicked()
@@ -277,42 +275,6 @@ final class MainWindowController: NSWindowController {
         ])
     }
 
-    private func buildEmergencyStopPanel() {
-        guard let mainWindow = window else { return }
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 88, height: 72),
-            styleMask: [.borderless, .utilityWindow],
-            backing: .buffered,
-            defer: false
-        )
-        panel.level = .floating
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-        panel.collectionBehavior = [.fullScreenAuxiliary, .canJoinAllSpaces]
-
-        stopButton.translatesAutoresizingMaskIntoConstraints = false
-        panel.contentView = NSView(frame: panel.contentRect(forFrameRect: panel.frame))
-        panel.contentView?.addSubview(stopButton)
-        NSLayoutConstraint.activate([
-            stopButton.leadingAnchor.constraint(equalTo: panel.contentView!.leadingAnchor),
-            stopButton.trailingAnchor.constraint(equalTo: panel.contentView!.trailingAnchor),
-            stopButton.topAnchor.constraint(equalTo: panel.contentView!.topAnchor),
-            stopButton.bottomAnchor.constraint(equalTo: panel.contentView!.bottomAnchor)
-        ])
-        emergencyStopPanel = panel
-        positionEmergencyStopPanel(relativeTo: mainWindow)
-        panel.orderFront(nil)
-    }
-
-    private func positionEmergencyStopPanel(relativeTo mainWindow: NSWindow) {
-        guard let panel = emergencyStopPanel else { return }
-        let frame = mainWindow.frame
-        let x = frame.midX - panel.frame.width / 2
-        let y = frame.maxY + 8
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
-    }
-
     // MARK: - Toggles
 
     @objc private func displayModeButtonClicked() {
@@ -325,6 +287,10 @@ final class MainWindowController: NSWindowController {
 
     @objc private func stopButtonClicked() {
         engine.stop()
+    }
+
+    func emergencyStopButton() -> NSButton {
+        stopButton
     }
 
     @objc private func clearListButtonClicked() {
@@ -552,18 +518,6 @@ final class MainWindowController: NSWindowController {
     }
 }
 
-extension MainWindowController: NSWindowDelegate {
-    func windowDidMove(_ notification: Notification) {
-        guard let mainWindow = window else { return }
-        positionEmergencyStopPanel(relativeTo: mainWindow)
-    }
-
-    func windowDidResize(_ notification: Notification) {
-        guard let mainWindow = window else { return }
-        positionEmergencyStopPanel(relativeTo: mainWindow)
-    }
-}
-
 // MARK: - NSTableViewDataSource / Delegate
 
 extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
@@ -690,11 +644,13 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
 extension MainWindowController: PlaybackEngineDelegate {
     func playbackEngine(_ engine: PlaybackEngine, didUpdateIndex index: Int?) {
         if let index = index {
+            automaticTransitionScheduledForIndex = nil
             reloadRow(index)
         }
     }
 
     func playbackEngine(_ engine: PlaybackEngine, didUpdateProgress progress: Double, for index: Int) {
+        guard engine.playingIndex == index || progress == 0 else { return }
         latestProgress = progress
         if engine.playingIndex == index {
             engine.previewView?.updateAudioProgress(progress)
@@ -703,6 +659,9 @@ extension MainWindowController: PlaybackEngineDelegate {
             playedEntryKeys.insert(playlist[index].identityKey)
             UserDefaults.standard.set(Array(playedEntryKeys), forKey: playedEntriesKey)
             reloadRow(index)
+
+            guard automaticTransitionScheduledForIndex != index else { return }
+            automaticTransitionScheduledForIndex = index
 
             let nextIndex: Int?
             if engine.settings.autoPlayContinuous {

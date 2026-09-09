@@ -38,6 +38,7 @@ final class PlaybackEngine: NSObject {
     private var pendingPrerollWorkItem: DispatchWorkItem?
     private var playbackGeneration = 0
     private var videoReadyObservation: NSKeyValueObservation?
+    private var startRequestGeneration = 0
 
     override init() {
         showsTitleCardBeforePlayback = UserDefaults.standard.bool(forKey: "ADPlayer.showsTitleCardBeforePlayback")
@@ -64,12 +65,16 @@ final class PlaybackEngine: NSObject {
     }
 
     private func start(entry: PlaylistEntry, at index: Int) {
+        startRequestGeneration += 1
+        let requestGeneration = startRequestGeneration
         if playingIndex != nil || pendingPrerollWorkItem != nil {
             stop { [weak self] in
-                self?.beginStart(entry: entry, at: index)
+                guard let self = self, self.startRequestGeneration == requestGeneration else { return }
+                self.beginStart(entry: entry, at: index)
             }
             return
         }
+        guard startRequestGeneration == requestGeneration else { return }
         beginStart(entry: entry, at: index)
     }
 
