@@ -30,6 +30,7 @@ final class VideoContainerView: NSView {
 final class PreviewView: NSView {
     let imageView = NSImageView()
     let videoView = VideoContainerView()
+    private let titleLabel = NSTextField(labelWithString: "")
 
     /// Supplies the right-click menu (e.g. fullscreen/windowed toggle).
     var contextMenuProvider: (() -> NSMenu?)?
@@ -60,8 +61,16 @@ final class PreviewView: NSView {
         videoView.translatesAutoresizingMaskIntoConstraints = false
         videoView.isHidden = true
 
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.alignment = .center
+        titleLabel.textColor = .white
+        titleLabel.drawsBackground = false
+        titleLabel.lineBreakMode = .byTruncatingMiddle
+        titleLabel.isHidden = true
+
         addSubview(videoView)
         addSubview(imageView)
+        addSubview(titleLabel)
 
         NSLayoutConstraint.activate([
             videoView.topAnchor.constraint(equalTo: topAnchor),
@@ -72,11 +81,31 @@ final class PreviewView: NSView {
             imageView.topAnchor.constraint(equalTo: topAnchor),
             imageView.bottomAnchor.constraint(equalTo: bottomAnchor),
             imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            imageView.trailingAnchor.constraint(equalTo: trailingAnchor)
+            imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
+
+            titleLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 20),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -20)
         ])
     }
 
+    /// Centered filename card (Helvetica Bold, ~10% of the view's height) shown
+    /// before playback starts, over a black background.
+    func showTitleCard(_ text: String) {
+        videoView.playerLayer.player = nil
+        videoView.isHidden = true
+        imageView.isHidden = true
+        imageView.image = nil
+
+        let fontSize = max(12, bounds.height * 0.10)
+        titleLabel.font = NSFont(name: "Helvetica-Bold", size: fontSize) ?? NSFont.boldSystemFont(ofSize: fontSize)
+        titleLabel.stringValue = text
+        titleLabel.isHidden = false
+    }
+
     func showImage(_ image: NSImage) {
+        titleLabel.isHidden = true
         videoView.playerLayer.player = nil
         videoView.isHidden = true
         imageView.image = image
@@ -84,6 +113,7 @@ final class PreviewView: NSView {
     }
 
     func showVideo(player: AVPlayer) {
+        titleLabel.isHidden = true
         imageView.isHidden = true
         imageView.image = nil
         videoView.playerLayer.player = player
@@ -92,6 +122,7 @@ final class PreviewView: NSView {
 
     /// Blackout: end of playback / explicit stop.
     func showBlack() {
+        titleLabel.isHidden = true
         imageView.isHidden = true
         imageView.image = nil
         videoView.playerLayer.player = nil

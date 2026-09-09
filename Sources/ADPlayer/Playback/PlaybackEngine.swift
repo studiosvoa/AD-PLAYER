@@ -15,12 +15,17 @@ final class PlaybackEngine: NSObject {
     weak var previewView: PreviewView?
     weak var delegate: PlaybackEngineDelegate?
 
+    /// When true, a video's filename is shown centered for 2s, then 1s of
+    /// black, before the video itself starts playing.
+    var showsTitleCardBeforePlayback = false
+
     private(set) var playingIndex: Int?
     private(set) var isPlaying = false
 
     private var player: AVPlayer?
     private var endObserver: NSObjectProtocol?
     private var timeObserverToken: Any?
+    private var pendingPrerollWorkItem: DispatchWorkItem?
 
     /// Click on a row's PLAY/STOP button, or SPACE on the selected row.
     func toggle(entry: PlaylistEntry, at index: Int) {
@@ -38,7 +43,35 @@ final class PlaybackEngine: NSObject {
     private func start(entry: PlaylistEntry, at index: Int) {
         stop()
         playingIndex = index
+        delegate?.playbackEngine(self, didUpdateIndex: index)
 
+        if showsTitleCardBeforePlayback && showsVideoTrack(entry) {
+            isPlaying = true
+            previewView?.showTitleCard(entry.displayName)
+
+            let afterBlack = DispatchWorkItem { [weak self] in
+                self?.beginActualPlayback(entry: entry, index: index)
+            }
+            let afterTitle = DispatchWorkItem { [weak self] in
+                self?.previewView?.showBlack()
+                self?.pendingPrerollWorkItem = afterBlack
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: afterBlack)
+            }
+            pendingPrerollWorkItem = afterTitle
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: afterTitle)
+        } else {
+            beginActualPlayback(entry: entry, index: index)
+        }
+    }
+
+    private func showsVideoTrack(_ entry: PlaylistEntry) -> Bool {
+        switch entry {
+        case .single(let item): return item.type == .video
+        case .pairedVideoAudio: return true
+        }
+    }
+
+    private func beginActualPlayback(entry: PlaylistEntry, index: Int) {
         switch entry {
         case .single(let item):
             switch item.type {
@@ -92,6 +125,9 @@ final class PlaybackEngine: NSObject {
     /// Stops playback and blacks out the preview. Freeze frame (paused video) is
     /// preserved by AVPlayer.pause() naturally; this is the explicit stop/end path.
     func stop() {
+        pendingPrerollWorkItem?.cancel()
+        pendingPrerollWorkItem = nil
+
         if let endObserver = endObserver {
             NotificationCenter.default.removeObserver(endObserver)
             self.endObserver = nil

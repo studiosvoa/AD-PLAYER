@@ -21,6 +21,7 @@ final class MainWindowController: NSWindowController {
     private let displayModeButton = NSButton(title: "Mode fenêtré", target: nil, action: nil)
     private let stopButton = NSButton(title: "STOP", target: nil, action: nil)
     private let filterCheckbox = NSButton(checkboxWithTitle: "Composés + images uniquement", target: nil, action: nil)
+    private let titleCardCheckbox = NSButton(checkboxWithTitle: "Nom du fichier avant lecture (2s + 1s noir)", target: nil, action: nil)
 
     private static let mediaColumnID = NSUserInterfaceItemIdentifier("media")
     private static let cellID = NSUserInterfaceItemIdentifier("mediaCell")
@@ -93,6 +94,10 @@ final class MainWindowController: NSWindowController {
         filterCheckbox.action = #selector(filterToggled)
         filterCheckbox.translatesAutoresizingMaskIntoConstraints = false
 
+        titleCardCheckbox.target = self
+        titleCardCheckbox.action = #selector(titleCardToggled)
+        titleCardCheckbox.translatesAutoresizingMaskIntoConstraints = false
+
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
@@ -128,6 +133,7 @@ final class MainWindowController: NSWindowController {
         root.addSubview(displayModeButton)
         root.addSubview(stopButton)
         root.addSubview(filterCheckbox)
+        root.addSubview(titleCardCheckbox)
         root.addSubview(scrollView)
         root.addSubview(statusBarSeparator)
         root.addSubview(statusLabel)
@@ -154,7 +160,10 @@ final class MainWindowController: NSWindowController {
             filterCheckbox.centerYAnchor.constraint(equalTo: stopButton.centerYAnchor),
             filterCheckbox.leadingAnchor.constraint(equalTo: stopButton.trailingAnchor, constant: 12),
 
-            scrollView.topAnchor.constraint(equalTo: stopButton.bottomAnchor, constant: 10),
+            titleCardCheckbox.topAnchor.constraint(equalTo: stopButton.bottomAnchor, constant: 8),
+            titleCardCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+
+            scrollView.topAnchor.constraint(equalTo: titleCardCheckbox.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
             scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
             scrollView.bottomAnchor.constraint(equalTo: statusBarSeparator.topAnchor, constant: -8),
@@ -186,6 +195,10 @@ final class MainWindowController: NSWindowController {
         if let currentIndex = currentIndex, let visualRow = visibleIndices.firstIndex(of: currentIndex) {
             tableView.selectRowIndexes(IndexSet(integer: visualRow), byExtendingSelection: false)
         }
+    }
+
+    @objc private func titleCardToggled() {
+        engine.showsTitleCardBeforePlayback = (titleCardCheckbox.state == .on)
     }
 
     /// Filtered view keeps only paired (red) entries and .jpg/.jpeg images,
