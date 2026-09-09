@@ -14,6 +14,10 @@ final class PreviewWindowController: NSWindowController {
     private(set) var displayMode: PreviewDisplayMode = .fullScreen
     var onDisplayModeChanged: ((PreviewDisplayMode) -> Void)?
 
+    /// Screen the window currently occupies while in windowed mode, so that
+    /// switching to fullscreen targets wherever the user last moved it.
+    private var windowedScreen: NSScreen?
+
     convenience init() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 960, height: 540),
@@ -29,6 +33,7 @@ final class PreviewWindowController: NSWindowController {
         window.collectionBehavior = [.fullScreenAuxiliary, .canJoinAllSpaces]
         self.init(window: window)
         window.contentView = previewView
+        window.delegate = self
         previewView.contextMenuProvider = { [weak self] in self?.buildContextMenu() }
     }
 
@@ -38,14 +43,17 @@ final class PreviewWindowController: NSWindowController {
 
         switch displayMode {
         case .fullScreen:
-            if let secondary = secondary {
+            let target = windowedScreen ?? secondary
+            if let target = target {
                 window.styleMask = [.borderless]
-                window.setFrame(secondary.frame, display: true)
+                window.setFrame(target.frame, display: true)
             } else {
                 applyWindowedFrame(on: NSScreen.main, window: window)
             }
         case .windowed:
-            applyWindowedFrame(on: secondary ?? NSScreen.main, window: window)
+            let target = secondary ?? NSScreen.main
+            applyWindowedFrame(on: target, window: window)
+            windowedScreen = target
         }
         window.orderFront(nil)
     }
@@ -81,5 +89,14 @@ final class PreviewWindowController: NSWindowController {
 
     @objc private func contextMenuToggle() {
         toggleDisplayMode()
+    }
+}
+
+extension PreviewWindowController: NSWindowDelegate {
+    /// User dragged the windowed preview to another screen: remember it so a
+    /// later switch to fullscreen targets that same screen.
+    func windowDidMove(_ notification: Notification) {
+        guard displayMode == .windowed, let window = window else { return }
+        windowedScreen = window.screen
     }
 }
