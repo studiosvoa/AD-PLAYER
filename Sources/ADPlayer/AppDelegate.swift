@@ -262,6 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case 1: settings.blackDuration = boundedNumericValue(index, value)
         case 2: settings.fadeDuration = boundedNumericValue(index, value)
         case 3: settings.targetLUFS = boundedNumericValue(index, value)
+            mainWindowController.refreshLoudnessMix()
         default: break
         }
     }

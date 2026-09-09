@@ -39,6 +39,7 @@ final class PlaybackEngine: NSObject {
     private var playbackGeneration = 0
     private var videoReadyObservation: NSKeyValueObservation?
     private var startRequestGeneration = 0
+    private var currentAudioSourceURL: URL?
 
     override init() {
         showsTitleCardBeforePlayback = UserDefaults.standard.bool(forKey: "ADPlayer.showsTitleCardBeforePlayback")
@@ -182,6 +183,7 @@ final class PlaybackEngine: NSObject {
     /// Analyzes `sourceURL` (the .wav/.mp3 file) and, if normalization is on
     /// and a correction is needed, attaches the gain to the item's audio track.
     private func applyLoudnessCorrection(to playerItem: AVPlayerItem, asset: AVAsset, sourceURL: URL) {
+        currentAudioSourceURL = sourceURL
         guard let track = asset.tracks(withMediaType: .audio).first else { return }
         let gainDB = loudnessNormalizationEnabled
             ? LoudnessCache.shared.gainDB(for: sourceURL, targetLUFS: settings.targetLUFS)
@@ -193,6 +195,12 @@ final class PlaybackEngine: NSObject {
             fadeDuration: settings.fadeDuration,
             assetDuration: duration
         )
+    }
+
+    func refreshLoudnessMix() {
+        guard let playerItem = player?.currentItem,
+              let sourceURL = currentAudioSourceURL else { return }
+        applyLoudnessCorrection(to: playerItem, asset: playerItem.asset, sourceURL: sourceURL)
     }
 
     private func togglePause() {
@@ -253,6 +261,7 @@ final class PlaybackEngine: NSObject {
             fadeOutAndPause(oldPlayer)
         }
         player = nil
+        currentAudioSourceURL = nil
         previewView?.showBlack(animatedDuration: settings.fadeDuration)
 
         let previous = playingIndex

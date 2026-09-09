@@ -293,6 +293,10 @@ final class MainWindowController: NSWindowController {
         stopButton
     }
 
+    func refreshLoudnessMix() {
+        engine.refreshLoudnessMix()
+    }
+
     @objc private func clearListButtonClicked() {
         engine.stop()
         playlist.removeAll()
@@ -335,6 +339,7 @@ final class MainWindowController: NSWindowController {
 
     @objc private func loudnessToggled() {
         engine.loudnessNormalizationEnabled = (loudnessCheckbox.state == .on)
+        engine.refreshLoudnessMix()
     }
 
     /// Filtered view keeps only paired (red) entries and .jpg/.jpeg images,
