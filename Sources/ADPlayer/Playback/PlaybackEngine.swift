@@ -66,8 +66,8 @@ final class PlaybackEngine: NSObject {
     }
 
     /// Builds a single-timeline player combining the video's picture track with
-    /// the WAV's audio track (the video's own audio track is left out entirely),
-    /// so the two are frame-accurately in sync from one play() call.
+    /// the paired audio file's track (the video's own audio track is left out
+    /// entirely), so the two are frame-accurately in sync from one play() call.
     private static func makeSyncedPlayer(videoURL: URL, audioURL: URL) -> AVPlayer? {
         let videoAsset = AVURLAsset(url: videoURL)
         let audioAsset = AVURLAsset(url: audioURL)

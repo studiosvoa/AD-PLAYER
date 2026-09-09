@@ -1,7 +1,7 @@
 import Foundation
 
-/// A row in the playlist: either a single accepted media file, or a video+WAV
-/// pair sharing the same base name, merged so the video plays with the WAV's
+/// A row in the playlist: either a single accepted media file, or a video+audio
+/// pair sharing the same base name, merged so the video plays with the .wav/.mp3's
 /// audio instead of its own soundtrack (in sync, on a single timeline).
 enum PlaylistEntry {
     case single(MediaItem)
@@ -22,7 +22,7 @@ enum PlaylistEntry {
         return false
     }
 
-    /// Scans a folder, then merges any video (.mp4/.mov) with a .wav file
+    /// Scans a folder, then merges any video (.mp4/.mov) with a .wav or .mp3 file
     /// sharing the same base name into a single paired entry.
     static func buildEntries(fromFolder folderURL: URL) -> [PlaylistEntry] {
         let items = MediaItem.loadFolder(folderURL)
@@ -42,16 +42,19 @@ enum PlaylistEntry {
             let base = item.url.deletingPathExtension().lastPathComponent.lowercased()
             let group = groupsByBaseName[base] ?? [item]
             let video = group.first { $0.type == .video }
-            let wav = group.first { $0.url.pathExtension.lowercased() == "wav" }
+            let audio = group.first {
+                let ext = $0.url.pathExtension.lowercased()
+                return ext == "wav" || ext == "mp3"
+            }
 
-            if let video = video, let wav = wav {
+            if let video = video, let audio = audio {
                 entries.append(.pairedVideoAudio(
                     name: video.url.deletingPathExtension().lastPathComponent,
                     videoURL: video.url,
-                    audioURL: wav.url
+                    audioURL: audio.url
                 ))
                 consumedURLs.insert(video.url)
-                consumedURLs.insert(wav.url)
+                consumedURLs.insert(audio.url)
             } else {
                 entries.append(.single(item))
                 consumedURLs.insert(item.url)
