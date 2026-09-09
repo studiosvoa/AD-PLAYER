@@ -1,9 +1,13 @@
 import Cocoa
 
 /// Draws a highlight ring around the row that is the current selection
-/// ("actif" = playing or ready to play).
+/// ("actif" = playing or ready to play). Paired video+WAV entries get a red
+/// ring instead of the normal blue one.
 final class HighlightRowView: NSTableRowView {
     var isCurrent: Bool = false {
+        didSet { needsDisplay = true }
+    }
+    var isPairedEntry: Bool = false {
         didSet { needsDisplay = true }
     }
 
@@ -12,7 +16,7 @@ final class HighlightRowView: NSTableRowView {
         guard isCurrent else { return }
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 1), xRadius: 4, yRadius: 4)
         path.lineWidth = 2
-        NSColor.controlAccentColor.setStroke()
+        (isPairedEntry ? NSColor.systemRed : NSColor.systemBlue).setStroke()
         path.stroke()
     }
 }

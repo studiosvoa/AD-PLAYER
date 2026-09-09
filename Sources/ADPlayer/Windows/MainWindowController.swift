@@ -4,7 +4,7 @@ final class MainWindowController: NSWindowController {
     private let engine: PlaybackEngine
     private let toggleDisplayMode: () -> Void
 
-    private var playlist: [MediaItem] = []
+    private var playlist: [PlaylistEntry] = []
     private var currentIndex: Int?
     private var loadedFolderURL: URL?
 
@@ -139,7 +139,7 @@ final class MainWindowController: NSWindowController {
 
     private func loadFolder(_ url: URL) {
         engine.stop()
-        playlist = MediaItem.loadFolder(url)
+        playlist = PlaylistEntry.buildEntries(fromFolder: url)
         currentIndex = nil
         loadedFolderURL = url
         statusLabel.stringValue = url.path
@@ -150,7 +150,7 @@ final class MainWindowController: NSWindowController {
 
     private func spacePressed() {
         guard let index = currentIndex, playlist.indices.contains(index) else { return }
-        engine.toggle(item: playlist[index], at: index)
+        engine.toggle(entry: playlist[index], at: index)
     }
 
     @objc private func playButtonClicked(_ sender: NSButton) {
@@ -159,7 +159,7 @@ final class MainWindowController: NSWindowController {
         if tableView.selectedRow != index {
             tableView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
         }
-        engine.toggle(item: playlist[index], at: index)
+        engine.toggle(entry: playlist[index], at: index)
     }
 
     private func reloadRow(_ index: Int) {
@@ -176,7 +176,7 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let item = playlist[row]
+        let entry = playlist[row]
 
         let cell: NSTableCellView
         if let reused = tableView.makeView(withIdentifier: Self.cellID, owner: self) as? NSTableCellView {
@@ -209,7 +209,7 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
             ])
         }
 
-        cell.textField?.stringValue = item.displayName
+        cell.textField?.stringValue = entry.displayName
 
         if let button = cell.subviews.compactMap({ $0 as? NSButton }).first {
             let isThisRowPlaying = engine.playingIndex == row && engine.isPlaying
@@ -227,6 +227,7 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         let rowView = HighlightRowView()
         rowView.isCurrent = (row == currentIndex)
+        rowView.isPairedEntry = playlist[row].isPaired
         return rowView
     }
 

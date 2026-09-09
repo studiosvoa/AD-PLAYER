@@ -20,30 +20,41 @@ final class PlaybackEngine: NSObject {
     private var endObserver: NSObjectProtocol?
 
     /// Click on a row's PLAY/STOP button, or SPACE on the selected row.
-    func toggle(item: MediaItem, at index: Int) {
+    func toggle(entry: PlaylistEntry, at index: Int) {
         if playingIndex == index {
-            if item.type == .image {
+            if case .single(let item) = entry, item.type == .image {
                 stop()
             } else {
                 togglePause()
             }
         } else {
-            start(item: item, at: index)
+            start(entry: entry, at: index)
         }
     }
 
-    private func start(item: MediaItem, at index: Int) {
+    private func start(entry: PlaylistEntry, at index: Int) {
         stop()
         playingIndex = index
 
-        switch item.type {
-        case .image:
-            guard let image = NSImage(contentsOf: item.url) else { return }
-            previewView?.showImage(image)
-            isPlaying = true
+        switch entry {
+        case .single(let item):
+            switch item.type {
+            case .image:
+                guard let image = NSImage(contentsOf: item.url) else { return }
+                previewView?.showImage(image)
+                isPlaying = true
 
-        case .video, .audio:
-            let newPlayer = AVPlayer(url: item.url)
+            case .video, .audio:
+                let newPlayer = AVPlayer(url: item.url)
+                player = newPlayer
+                previewView?.showVideo(player: newPlayer)
+                observeEnd(of: newPlayer, index: index)
+                newPlayer.play()
+                isPlaying = true
+            }
+
+        case .pairedVideoAudio(_, let videoURL, let audioURL):
+            guard let newPlayer = Self.makeSyncedPlayer(videoURL: videoURL, audioURL: audioURL) else { return }
             player = newPlayer
             previewView?.showVideo(player: newPlayer)
             observeEnd(of: newPlayer, index: index)
@@ -52,6 +63,33 @@ final class PlaybackEngine: NSObject {
         }
 
         delegate?.playbackEngine(self, didUpdateIndex: index)
+    }
+
+    /// Builds a single-timeline player combining the video's picture track with
+    /// the WAV's audio track (the video's own audio track is left out entirely),
+    /// so the two are frame-accurately in sync from one play() call.
+    private static func makeSyncedPlayer(videoURL: URL, audioURL: URL) -> AVPlayer? {
+        let videoAsset = AVURLAsset(url: videoURL)
+        let audioAsset = AVURLAsset(url: audioURL)
+        guard let videoTrack = videoAsset.tracks(withMediaType: .video).first,
+              let audioTrack = audioAsset.tracks(withMediaType: .audio).first else { return nil }
+
+        let composition = AVMutableComposition()
+        guard let compVideoTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid),
+              let compAudioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { return nil }
+
+        let duration = min(videoAsset.duration, audioAsset.duration)
+        let range = CMTimeRange(start: .zero, duration: duration)
+
+        do {
+            try compVideoTrack.insertTimeRange(range, of: videoTrack, at: .zero)
+            try compAudioTrack.insertTimeRange(range, of: audioTrack, at: .zero)
+        } catch {
+            return nil
+        }
+        compVideoTrack.preferredTransform = videoTrack.preferredTransform
+
+        return AVPlayer(playerItem: AVPlayerItem(asset: composition))
     }
 
     private func togglePause() {
