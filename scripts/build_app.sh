@@ -15,6 +15,8 @@ DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
 
 cd "$ROOT_DIR"
+rm -f "$DIST_DIR/Help.html"
+rm -f "$DIST_DIR/AD-PLAYER.zip" "$DIST_DIR/.DS_Store"
 echo "==> Building release binary..."
 swift build -c release
 
@@ -33,7 +35,6 @@ cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 chmod +x "$APP_DIR/Contents/MacOS/$APP_NAME"
 
 if [ -f "$ROOT_DIR/Help.html" ]; then
-  cp "$ROOT_DIR/Help.html" "$DIST_DIR/Help.html"
   cp "$ROOT_DIR/Help.html" "$APP_DIR/Contents/Resources/Help.html"
 fi
 
