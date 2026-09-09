@@ -19,6 +19,10 @@ final class PlaybackEngine: NSObject {
     /// black, before the video itself starts playing.
     var showsTitleCardBeforePlayback = false
 
+    /// When true, standalone audio files and paired entries' audio track are
+    /// gain-corrected toward -18 LUFS (see LoudnessCache).
+    var loudnessNormalizationEnabled = false
+
     private(set) var playingIndex: Int?
     private(set) var isPlaying = false
 
@@ -80,7 +84,19 @@ final class PlaybackEngine: NSObject {
                 previewView?.showImage(image)
                 isPlaying = true
 
-            case .video, .audio:
+            case .audio:
+                let asset = AVURLAsset(url: item.url)
+                let playerItem = AVPlayerItem(asset: asset)
+                applyLoudnessCorrection(to: playerItem, asset: asset, sourceURL: item.url)
+                let newPlayer = AVPlayer(playerItem: playerItem)
+                player = newPlayer
+                previewView?.showVideo(player: newPlayer)
+                observeEnd(of: newPlayer, index: index)
+                observeProgress(of: newPlayer, index: index)
+                newPlayer.play()
+                isPlaying = true
+
+            case .video:
                 let newPlayer = AVPlayer(url: item.url)
                 player = newPlayer
                 previewView?.showVideo(player: newPlayer)
@@ -92,7 +108,9 @@ final class PlaybackEngine: NSObject {
 
         case .pairedVideoAudio(_, let videoURL, let audioURL):
             guard let composition = SyncedComposition.build(videoURL: videoURL, audioURL: audioURL) else { return }
-            let newPlayer = AVPlayer(playerItem: AVPlayerItem(asset: composition))
+            let playerItem = AVPlayerItem(asset: composition)
+            applyLoudnessCorrection(to: playerItem, asset: composition, sourceURL: audioURL)
+            let newPlayer = AVPlayer(playerItem: playerItem)
             player = newPlayer
             previewView?.showVideo(player: newPlayer)
             observeEnd(of: newPlayer, index: index)
@@ -108,6 +126,14 @@ final class PlaybackEngine: NSObject {
     /// playlist has been refreshed, without touching the player or its state.
     func remapPlayingIndex(to newIndex: Int?) {
         playingIndex = newIndex
+    }
+
+    /// Analyzes `sourceURL` (the .wav/.mp3 file) and, if normalization is on
+    /// and a correction is needed, attaches the gain to the item's audio track.
+    private func applyLoudnessCorrection(to playerItem: AVPlayerItem, asset: AVAsset, sourceURL: URL) {
+        guard loudnessNormalizationEnabled, let track = asset.tracks(withMediaType: .audio).first else { return }
+        let gainDB = LoudnessCache.shared.gainDB(for: sourceURL)
+        playerItem.audioMix = LoudnessAudioMix.make(for: track, gainDB: gainDB)
     }
 
     private func togglePause() {

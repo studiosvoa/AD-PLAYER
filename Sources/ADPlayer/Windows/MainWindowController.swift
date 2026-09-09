@@ -22,6 +22,7 @@ final class MainWindowController: NSWindowController {
     private let stopButton = NSButton(title: "STOP", target: nil, action: nil)
     private let filterCheckbox = NSButton(checkboxWithTitle: "Composés + images uniquement", target: nil, action: nil)
     private let titleCardCheckbox = NSButton(checkboxWithTitle: "Nom du fichier avant lecture (2s + 1s noir)", target: nil, action: nil)
+    private let loudnessCheckbox = NSButton(checkboxWithTitle: "Normaliser le niveau (-18 LUFS)", target: nil, action: nil)
 
     private static let mediaColumnID = NSUserInterfaceItemIdentifier("media")
     private static let cellID = NSUserInterfaceItemIdentifier("mediaCell")
@@ -98,6 +99,10 @@ final class MainWindowController: NSWindowController {
         titleCardCheckbox.action = #selector(titleCardToggled)
         titleCardCheckbox.translatesAutoresizingMaskIntoConstraints = false
 
+        loudnessCheckbox.target = self
+        loudnessCheckbox.action = #selector(loudnessToggled)
+        loudnessCheckbox.translatesAutoresizingMaskIntoConstraints = false
+
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
@@ -134,6 +139,7 @@ final class MainWindowController: NSWindowController {
         root.addSubview(stopButton)
         root.addSubview(filterCheckbox)
         root.addSubview(titleCardCheckbox)
+        root.addSubview(loudnessCheckbox)
         root.addSubview(scrollView)
         root.addSubview(statusBarSeparator)
         root.addSubview(statusLabel)
@@ -163,7 +169,10 @@ final class MainWindowController: NSWindowController {
             titleCardCheckbox.topAnchor.constraint(equalTo: stopButton.bottomAnchor, constant: 8),
             titleCardCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
 
-            scrollView.topAnchor.constraint(equalTo: titleCardCheckbox.bottomAnchor, constant: 10),
+            loudnessCheckbox.topAnchor.constraint(equalTo: titleCardCheckbox.bottomAnchor, constant: 8),
+            loudnessCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+
+            scrollView.topAnchor.constraint(equalTo: loudnessCheckbox.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
             scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
             scrollView.bottomAnchor.constraint(equalTo: statusBarSeparator.topAnchor, constant: -8),
@@ -199,6 +208,10 @@ final class MainWindowController: NSWindowController {
 
     @objc private func titleCardToggled() {
         engine.showsTitleCardBeforePlayback = (titleCardCheckbox.state == .on)
+    }
+
+    @objc private func loudnessToggled() {
+        engine.loudnessNormalizationEnabled = (loudnessCheckbox.state == .on)
     }
 
     /// Filtered view keeps only paired (red) entries and .jpg/.jpeg images,
@@ -309,18 +322,23 @@ final class MainWindowController: NSWindowController {
         exportButton.isEnabled = false
         let restoredStatus = loadedFolderURL?.path ?? statusLabel.stringValue
 
-        PlaylistExporter.exportPairedEntries(playlist, to: folder, progress: { [weak self] name, completed, total, error in
-            guard let self = self else { return }
-            if let error = error {
-                self.statusLabel.stringValue = "Export \(completed)/\(total) — erreur sur \(name) : \(error.localizedDescription)"
-            } else {
-                self.statusLabel.stringValue = "Export \(completed)/\(total) — \(name) terminé"
+        PlaylistExporter.exportPairedEntries(
+            playlist,
+            to: folder,
+            loudnessNormalizationEnabled: loudnessCheckbox.state == .on,
+            progress: { [weak self] name, completed, total, error in
+                guard let self = self else { return }
+                if let error = error {
+                    self.statusLabel.stringValue = "Export \(completed)/\(total) — erreur sur \(name) : \(error.localizedDescription)"
+                } else {
+                    self.statusLabel.stringValue = "Export \(completed)/\(total) — \(name) terminé"
+                }
+            }, completion: { [weak self] in
+                guard let self = self else { return }
+                self.exportButton.isEnabled = true
+                self.statusLabel.stringValue = restoredStatus
             }
-        }, completion: { [weak self] in
-            guard let self = self else { return }
-            self.exportButton.isEnabled = true
-            self.statusLabel.stringValue = restoredStatus
-        })
+        )
     }
 
     // MARK: - Playback control

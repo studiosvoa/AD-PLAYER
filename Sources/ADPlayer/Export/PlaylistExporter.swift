@@ -18,6 +18,7 @@ enum PlaylistExporter {
     static func exportPairedEntries(
         _ entries: [PlaylistEntry],
         to folder: URL,
+        loudnessNormalizationEnabled: Bool,
         progress: @escaping (_ name: String, _ completed: Int, _ total: Int, _ error: Error?) -> Void,
         completion: @escaping () -> Void
     ) {
@@ -27,13 +28,21 @@ enum PlaylistExporter {
             }
             return nil
         }
-        exportNext(paired, index: 0, folder: folder, progress: progress, completion: completion)
+        exportNext(
+            paired,
+            index: 0,
+            folder: folder,
+            loudnessNormalizationEnabled: loudnessNormalizationEnabled,
+            progress: progress,
+            completion: completion
+        )
     }
 
     private static func exportNext(
         _ items: [(name: String, videoURL: URL, audioURL: URL)],
         index: Int,
         folder: URL,
+        loudnessNormalizationEnabled: Bool,
         progress: @escaping (String, Int, Int, Error?) -> Void,
         completion: @escaping () -> Void
     ) {
@@ -45,24 +54,40 @@ enum PlaylistExporter {
         let outputURL = folder.appendingPathComponent(item.name).appendingPathExtension("mp4")
         try? FileManager.default.removeItem(at: outputURL)
 
+        func proceedToNext() {
+            exportNext(
+                items,
+                index: index + 1,
+                folder: folder,
+                loudnessNormalizationEnabled: loudnessNormalizationEnabled,
+                progress: progress,
+                completion: completion
+            )
+        }
+
         guard let composition = SyncedComposition.build(videoURL: item.videoURL, audioURL: item.audioURL) else {
             progress(item.name, index + 1, items.count, ExportError.compositionFailed)
-            exportNext(items, index: index + 1, folder: folder, progress: progress, completion: completion)
+            proceedToNext()
             return
         }
         guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
             progress(item.name, index + 1, items.count, ExportError.sessionCreationFailed)
-            exportNext(items, index: index + 1, folder: folder, progress: progress, completion: completion)
+            proceedToNext()
             return
         }
         session.outputURL = outputURL
         session.outputFileType = .mp4
 
+        if loudnessNormalizationEnabled, let audioTrack = composition.tracks(withMediaType: .audio).first {
+            let gainDB = LoudnessCache.shared.gainDB(for: item.audioURL)
+            session.audioMix = LoudnessAudioMix.make(for: audioTrack, gainDB: gainDB)
+        }
+
         session.exportAsynchronously {
             let error: Error? = (session.status == .completed) ? nil : (session.error ?? ExportError.sessionCreationFailed)
             DispatchQueue.main.async {
                 progress(item.name, index + 1, items.count, error)
-                exportNext(items, index: index + 1, folder: folder, progress: progress, completion: completion)
+                proceedToNext()
             }
         }
     }
