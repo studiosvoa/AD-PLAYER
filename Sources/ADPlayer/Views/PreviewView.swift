@@ -31,6 +31,13 @@ final class PreviewView: NSView {
     let imageView = NSImageView()
     let videoView = VideoContainerView()
 
+    /// Supplies the right-click menu (e.g. fullscreen/windowed toggle).
+    var contextMenuProvider: (() -> NSMenu?)?
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        contextMenuProvider?()
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true

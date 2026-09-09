@@ -10,9 +10,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         previewWindowController = PreviewWindowController()
         engine.previewView = previewWindowController.previewView
 
-        mainWindowController = MainWindowController(engine: engine)
+        mainWindowController = MainWindowController(engine: engine, toggleDisplayMode: { [weak self] in
+            self?.previewWindowController.toggleDisplayMode()
+        })
 
-        previewWindowController.placeOnSecondaryScreenOrFallback()
+        previewWindowController.onDisplayModeChanged = { [weak self] mode in
+            self?.mainWindowController.setDisplayModeButtonTitle(forWindowed: mode == .windowed)
+        }
+
+        previewWindowController.placeWindow()
         mainWindowController.showWindow(nil)
         mainWindowController.window?.makeKeyAndOrderFront(nil)
 
@@ -27,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func screenParametersChanged() {
-        previewWindowController.placeOnSecondaryScreenOrFallback()
+        previewWindowController.placeWindow()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

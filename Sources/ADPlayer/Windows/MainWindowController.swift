@@ -2,6 +2,7 @@ import Cocoa
 
 final class MainWindowController: NSWindowController {
     private let engine: PlaybackEngine
+    private let toggleDisplayMode: () -> Void
 
     private var playlist: [MediaItem] = []
     private var currentIndex: Int?
@@ -10,12 +11,14 @@ final class MainWindowController: NSWindowController {
     private let tableView = PlaylistTableView()
     private let statusLabel = NSTextField(labelWithString: "Aucun dossier chargé")
     private let openButton = NSButton(title: "OPEN", target: nil, action: nil)
+    private let displayModeButton = NSButton(title: "Mode fenêtré", target: nil, action: nil)
 
     private static let mediaColumnID = NSUserInterfaceItemIdentifier("media")
     private static let cellID = NSUserInterfaceItemIdentifier("mediaCell")
 
-    init(engine: PlaybackEngine) {
+    init(engine: PlaybackEngine, toggleDisplayMode: @escaping () -> Void) {
         self.engine = engine
+        self.toggleDisplayMode = toggleDisplayMode
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 460, height: 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -27,6 +30,11 @@ final class MainWindowController: NSWindowController {
         super.init(window: window)
         engine.delegate = self
         buildUI()
+    }
+
+    /// Reflects the preview window's current display mode on the toggle button.
+    func setDisplayModeButtonTitle(forWindowed windowed: Bool) {
+        displayModeButton.title = windowed ? "Plein écran" : "Mode fenêtré"
     }
 
     required init?(coder: NSCoder) {
@@ -47,6 +55,11 @@ final class MainWindowController: NSWindowController {
         openButton.target = self
         openButton.action = #selector(openButtonClicked)
         openButton.translatesAutoresizingMaskIntoConstraints = false
+
+        displayModeButton.bezelStyle = .rounded
+        displayModeButton.target = self
+        displayModeButton.action = #selector(displayModeButtonClicked)
+        displayModeButton.translatesAutoresizingMaskIntoConstraints = false
 
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -77,6 +90,7 @@ final class MainWindowController: NSWindowController {
         statusBarSeparator.translatesAutoresizingMaskIntoConstraints = false
 
         root.addSubview(openButton)
+        root.addSubview(displayModeButton)
         root.addSubview(scrollView)
         root.addSubview(statusBarSeparator)
         root.addSubview(statusLabel)
@@ -84,6 +98,9 @@ final class MainWindowController: NSWindowController {
         NSLayoutConstraint.activate([
             openButton.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
             openButton.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+
+            displayModeButton.centerYAnchor.constraint(equalTo: openButton.centerYAnchor),
+            displayModeButton.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
 
             scrollView.topAnchor.constraint(equalTo: openButton.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
@@ -98,6 +115,12 @@ final class MainWindowController: NSWindowController {
             statusLabel.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
             statusLabel.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10)
         ])
+    }
+
+    // MARK: - Toggles
+
+    @objc private func displayModeButtonClicked() {
+        toggleDisplayMode()
     }
 
     // MARK: - Folder loading
