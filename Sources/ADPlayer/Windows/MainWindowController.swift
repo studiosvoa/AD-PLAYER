@@ -347,12 +347,13 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
         if let reused = tableView.makeView(withIdentifier: Self.cellID, owner: self) as? NSTableCellView {
             cell = reused
         } else {
-            cell = NSTableCellView()
+            cell = MediaCellView()
             cell.identifier = Self.cellID
 
             let textField = NSTextField(labelWithString: "")
             textField.translatesAutoresizingMaskIntoConstraints = false
             textField.lineBreakMode = .byTruncatingMiddle
+            textField.textColor = .black
             cell.addSubview(textField)
             cell.textField = textField
 
