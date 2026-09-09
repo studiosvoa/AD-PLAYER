@@ -174,9 +174,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let emergencyStopButton = mainWindowController.emergencyStopButton()
         emergencyStopButton.translatesAutoresizingMaskIntoConstraints = false
 
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 390))
+        let duoInfoLabel = NSTextField(labelWithString: "Les DUOS sont des fichiers mp4, mov, wav et mp3 nommés de manière identique, par exemple Groupe 1.mov et Groupe 1.wav. Quand ces fichiers sont reconnus par l'application, ils sont considérés comme un DUO. Le flux vidéo MOV ou MP4 est projeté et l'audio WAV ou MP3 est synchronisé avec la vidéo. Le bouton Export assemble la vidéo et le son, avec correction LUFS si elle est activée.")
+        duoInfoLabel.translatesAutoresizingMaskIntoConstraints = false
+        duoInfoLabel.alignment = .left
+        duoInfoLabel.textColor = .secondaryLabelColor
+        duoInfoLabel.lineBreakMode = .byWordWrapping
+        duoInfoLabel.maximumNumberOfLines = 0
+        duoInfoLabel.preferredMaxLayoutWidth = 420
+
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 520))
         content.addSubview(stack)
         content.addSubview(emergencyStopButton)
+        content.addSubview(duoInfoLabel)
         content.addSubview(buttons)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
@@ -186,12 +195,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             emergencyStopButton.centerXAnchor.constraint(equalTo: content.centerXAnchor),
             emergencyStopButton.widthAnchor.constraint(equalToConstant: 88),
             emergencyStopButton.heightAnchor.constraint(equalToConstant: 72),
+            duoInfoLabel.topAnchor.constraint(equalTo: emergencyStopButton.bottomAnchor, constant: 18),
+            duoInfoLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
+            duoInfoLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
             buttons.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
-            buttons.topAnchor.constraint(greaterThanOrEqualTo: emergencyStopButton.bottomAnchor, constant: 18),
+            buttons.topAnchor.constraint(greaterThanOrEqualTo: duoInfoLabel.bottomAnchor, constant: 18),
             buttons.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -16)
         ])
 
-        let drawer = NSDrawer(contentSize: NSSize(width: 460, height: 390), preferredEdge: .maxX)
+        let drawer = NSDrawer(contentSize: NSSize(width: 460, height: 520), preferredEdge: .maxX)
         drawer.contentView = content
         drawer.parentWindow = mainWindowController.window
         settingsDrawer = drawer

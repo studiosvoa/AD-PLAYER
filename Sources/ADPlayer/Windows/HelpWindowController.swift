@@ -94,18 +94,19 @@ final class HelpWindowController: NSWindowController {
     Il est centré sous les réglages et possède un cadre rouge pour être repéré
     rapidement. Échap déclenche la même commande.
 
-    5. Nommer les duos
+    5. Nommer et utiliser les duos
 
-    Pour créer un duo, placez dans le même dossier une vidéo et un audio qui
-    partagent exactement le même nom de base, avant leur extension.
-
+    Les DUOS sont des fichiers MP4, MOV, WAV et MP3 nommés de manière identique.
     Exemple :
-    A0.mov
-    A0.wav
+    Groupe 1.mov
+    Groupe 1.wav
 
-    Ces deux fichiers sont regroupés en une seule ligne. Le fichier vidéo fournit
-    l'image et le fichier audio fournit la bande sonore. Les extensions prises en
-    charge sont MP4, MOV, WAV, MP3, JPG, JPEG et PNG.
+    Quand ces fichiers sont reconnus par l'application, ils sont considérés
+    comme un DUO. Le flux vidéo MOV ou MP4 est projeté et l'audio WAV ou MP3 est
+    synchronisé avec la vidéo. Le bouton Export assemble la vidéo et le son en
+    un seul fichier MP4, avec correction LUFS si elle est activée.
+
+    Les extensions prises en charge sont MP4, MOV, WAV, MP3, JPG, JPEG et PNG.
 
     6. Commandes de lecture
 
