@@ -19,6 +19,7 @@ enum PlaylistExporter {
         _ entries: [PlaylistEntry],
         to folder: URL,
         loudnessNormalizationEnabled: Bool,
+        targetLUFS: Double,
         progress: @escaping (_ name: String, _ completed: Int, _ total: Int, _ error: Error?) -> Void,
         completion: @escaping () -> Void
     ) {
@@ -33,6 +34,7 @@ enum PlaylistExporter {
             index: 0,
             folder: folder,
             loudnessNormalizationEnabled: loudnessNormalizationEnabled,
+            targetLUFS: targetLUFS,
             progress: progress,
             completion: completion
         )
@@ -43,6 +45,7 @@ enum PlaylistExporter {
         index: Int,
         folder: URL,
         loudnessNormalizationEnabled: Bool,
+        targetLUFS: Double,
         progress: @escaping (String, Int, Int, Error?) -> Void,
         completion: @escaping () -> Void
     ) {
@@ -60,6 +63,7 @@ enum PlaylistExporter {
                 index: index + 1,
                 folder: folder,
                 loudnessNormalizationEnabled: loudnessNormalizationEnabled,
+                targetLUFS: targetLUFS,
                 progress: progress,
                 completion: completion
             )
@@ -79,7 +83,7 @@ enum PlaylistExporter {
         session.outputFileType = .mp4
 
         if loudnessNormalizationEnabled, let audioTrack = composition.tracks(withMediaType: .audio).first {
-            let gainDB = LoudnessCache.shared.gainDB(for: item.audioURL)
+            let gainDB = LoudnessCache.shared.gainDB(for: item.audioURL, targetLUFS: targetLUFS)
             session.audioMix = LoudnessAudioMix.make(for: audioTrack, gainDB: gainDB)
         }
 

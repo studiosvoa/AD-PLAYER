@@ -25,15 +25,31 @@ final class HighlightRowView: NSTableRowView {
 
         let vividColor = isPairedEntry ? NSColor.systemRed : NSColor.systemBlue
 
+        let fullRingRect = bounds.insetBy(dx: 2, dy: 1)
+        let controlsInset: CGFloat = 40
+        let ringRect = NSRect(
+            x: fullRingRect.minX,
+            y: fullRingRect.minY,
+            width: max(0, fullRingRect.width - controlsInset),
+            height: fullRingRect.height
+        )
+        let path = NSBezierPath(roundedRect: ringRect, xRadius: 4, yRadius: 4)
+
         if progress > 0 {
             let lightColor = vividColor.blended(withFraction: 0.65, of: .white) ?? vividColor
-            let fillRect = NSRect(x: bounds.minX, y: bounds.minY, width: bounds.width * progress, height: bounds.height)
+            let fillRect = NSRect(
+                x: ringRect.minX,
+                y: ringRect.minY,
+                width: ringRect.width * progress,
+                height: ringRect.height
+            )
+            let fillPath = NSBezierPath(roundedRect: fillRect, xRadius: 4, yRadius: 4)
+            path.addClip()
             lightColor.setFill()
-            fillRect.fill()
+            fillPath.fill()
         }
 
         guard isCurrent else { return }
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 1), xRadius: 4, yRadius: 4)
         path.lineWidth = 2
         vividColor.setStroke()
         path.stroke()

@@ -51,7 +51,7 @@ final class PreviewWindowController: NSWindowController {
                 applyWindowedFrame(on: NSScreen.main, window: window)
             }
         case .windowed:
-            let target = secondary ?? NSScreen.main
+            let target = window.screen ?? windowedScreen ?? secondary ?? NSScreen.main
             applyWindowedFrame(on: target, window: window)
             windowedScreen = target
         }

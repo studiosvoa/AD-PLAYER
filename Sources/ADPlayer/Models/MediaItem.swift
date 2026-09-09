@@ -13,7 +13,7 @@ struct MediaItem: Equatable {
     var displayName: String { url.lastPathComponent }
 
     /// Extensions accepted by the player.
-    static let allowedExtensions: Set<String> = ["mp4", "mov", "wav", "mp3", "jpg", "jpeg"]
+    static let allowedExtensions: Set<String> = ["mp4", "mov", "wav", "mp3", "jpg", "jpeg", "png"]
 
     init?(url: URL) {
         let ext = url.pathExtension.lowercased()
@@ -22,7 +22,7 @@ struct MediaItem: Equatable {
             type = .video
         case "wav", "mp3":
             type = .audio
-        case "jpg", "jpeg":
+        case "jpg", "jpeg", "png":
             type = .image
         default:
             return nil

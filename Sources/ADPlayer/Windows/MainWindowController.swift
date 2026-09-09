@@ -3,6 +3,8 @@ import Cocoa
 final class MainWindowController: NSWindowController {
     private let engine: PlaybackEngine
     private let toggleDisplayMode: () -> Void
+    private let openSettings: () -> Void
+    private var emergencyStopPanel: NSPanel?
 
     private var playlist: [PlaylistEntry] = []
     private var visibleIndices: [Int] = []
@@ -11,27 +13,41 @@ final class MainWindowController: NSWindowController {
     private var latestProgress: Double = 0
     private var loadedFolderURL: URL?
     private var autoRefreshTimer: Timer?
+    private var localKeyMonitor: Any?
+    private let lastPlaylistURLKey = "ADPlayer.lastPlaylistURL"
+    private let playedEntriesKey = "ADPlayer.playedEntries"
+    private var playedEntryKeys = Set<String>()
+
+    var engineSettings: PlaybackSettings { engine.settings }
+    var isTitleCardEnabled: Bool { engine.showsTitleCardBeforePlayback }
 
     private let tableView = PlaylistTableView()
     private let statusLabel = NSTextField(labelWithString: "Aucun dossier chargé")
-    private let openButton = NSButton(title: "OPEN", target: nil, action: nil)
     private let refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
     private let autoRefreshCheckbox = NSButton(checkboxWithTitle: "Auto", target: nil, action: nil)
     private let exportButton = NSButton(title: "Export", target: nil, action: nil)
     private let displayModeButton = NSButton(title: "Mode fenêtré", target: nil, action: nil)
-    private let stopButton = NSButton(title: "STOP", target: nil, action: nil)
-    private let filterCheckbox = NSButton(checkboxWithTitle: "Composés + images uniquement", target: nil, action: nil)
-    private let titleCardCheckbox = NSButton(checkboxWithTitle: "Nom du fichier avant lecture (2s + 1s noir)", target: nil, action: nil)
-    private let loudnessCheckbox = NSButton(checkboxWithTitle: "Normaliser le niveau (-18 LUFS)", target: nil, action: nil)
+    private let clearListButton = NSButton(title: "Clear list", target: nil, action: nil)
+    private let clearViewedButton = NSButton(title: "Clear viewed", target: nil, action: nil)
+    private let stopButton = NSButton(title: "", target: nil, action: nil)
+    private let filterCheckbox = NSButton(checkboxWithTitle: "Filtrer Duos", target: nil, action: nil)
+    private let titleCardCheckbox = NSButton(checkboxWithTitle: "Amorce titrée", target: nil, action: nil)
+    private let audioTitleCheckbox = NSButton(checkboxWithTitle: "Audio seul compris", target: nil, action: nil)
+    private let loudnessCheckbox = NSButton(checkboxWithTitle: "Normaliser le LUFS", target: nil, action: nil)
+    private let settingsTabButton = NSButton(title: "", target: nil, action: nil)
+    private let emptyListLabel = NSTextField(labelWithString: "Glisser-déposer des médias ou un dossier de médias")
 
     private static let mediaColumnID = NSUserInterfaceItemIdentifier("media")
     private static let cellID = NSUserInterfaceItemIdentifier("mediaCell")
+    private static let playButtonID = NSUserInterfaceItemIdentifier("playButton")
+    private static let playedButtonID = NSUserInterfaceItemIdentifier("playedButton")
 
-    init(engine: PlaybackEngine, toggleDisplayMode: @escaping () -> Void) {
+    init(engine: PlaybackEngine, toggleDisplayMode: @escaping () -> Void, openSettings: @escaping () -> Void) {
         self.engine = engine
         self.toggleDisplayMode = toggleDisplayMode
+        self.openSettings = openSettings
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 600),
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -40,7 +56,21 @@ final class MainWindowController: NSWindowController {
         window.minSize = NSSize(width: 360, height: 320)
         super.init(window: window)
         engine.delegate = self
+        window.delegate = self
+        playedEntryKeys = Set(UserDefaults.standard.stringArray(forKey: playedEntriesKey) ?? [])
         buildUI()
+        buildEmergencyStopPanel()
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53 else { return event }
+            self?.stopButtonClicked()
+            return nil
+        }
+    }
+
+    deinit {
+        if let localKeyMonitor = localKeyMonitor {
+            NSEvent.removeMonitor(localKeyMonitor)
+        }
     }
 
     /// Reflects the preview window's current display mode on the toggle button.
@@ -62,16 +92,13 @@ final class MainWindowController: NSWindowController {
         root.onFolderDropped = { [weak self] url in self?.loadFolder(url) }
         window.contentView = root
 
-        openButton.bezelStyle = .rounded
-        openButton.target = self
-        openButton.action = #selector(openButtonClicked)
-        openButton.translatesAutoresizingMaskIntoConstraints = false
-
         refreshButton.bezelStyle = .rounded
+        refreshButton.widthAnchor.constraint(equalToConstant: 140).isActive = true
         refreshButton.target = self
         refreshButton.action = #selector(refreshButtonClicked)
         refreshButton.translatesAutoresizingMaskIntoConstraints = false
 
+        autoRefreshCheckbox.title = "Auto-refresh"
         autoRefreshCheckbox.target = self
         autoRefreshCheckbox.action = #selector(autoRefreshToggled)
         autoRefreshCheckbox.translatesAutoresizingMaskIntoConstraints = false
@@ -86,7 +113,31 @@ final class MainWindowController: NSWindowController {
         displayModeButton.action = #selector(displayModeButtonClicked)
         displayModeButton.translatesAutoresizingMaskIntoConstraints = false
 
-        stopButton.bezelStyle = .rounded
+        clearListButton.bezelStyle = .rounded
+        clearListButton.target = self
+        clearListButton.action = #selector(clearListButtonClicked)
+        clearListButton.translatesAutoresizingMaskIntoConstraints = false
+
+        clearViewedButton.bezelStyle = .rounded
+        clearViewedButton.target = self
+        clearViewedButton.action = #selector(clearViewedButtonClicked)
+        clearViewedButton.translatesAutoresizingMaskIntoConstraints = false
+
+        stopButton.bezelStyle = .regularSquare
+        let stopSymbolConfiguration = NSImage.SymbolConfiguration(pointSize: 28, weight: .bold)
+        stopButton.image = NSImage(systemSymbolName: "stop.fill", accessibilityDescription: "Stop")?.withSymbolConfiguration(stopSymbolConfiguration)
+        stopButton.imagePosition = .imageOnly
+        stopButton.toolTip = "Stop"
+        stopButton.controlSize = .large
+        stopButton.title = ""
+        stopButton.imagePosition = .imageOnly
+        stopButton.toolTip = "STOP D’URGENCE (Échap)"
+        stopButton.contentTintColor = .systemRed
+        stopButton.wantsLayer = true
+        stopButton.layer?.borderWidth = 2
+        stopButton.layer?.borderColor = NSColor.systemRed.cgColor
+        stopButton.layer?.cornerRadius = 0
+        stopButton.setButtonType(.momentaryPushIn)
         stopButton.target = self
         stopButton.action = #selector(stopButtonClicked)
         stopButton.translatesAutoresizingMaskIntoConstraints = false
@@ -97,11 +148,27 @@ final class MainWindowController: NSWindowController {
 
         titleCardCheckbox.target = self
         titleCardCheckbox.action = #selector(titleCardToggled)
+        titleCardCheckbox.state = engine.showsTitleCardBeforePlayback ? .on : .off
         titleCardCheckbox.translatesAutoresizingMaskIntoConstraints = false
+
+        audioTitleCheckbox.target = self
+        audioTitleCheckbox.action = #selector(audioTitleToggled)
+        audioTitleCheckbox.state = engine.settings.showAudioTitle ? .on : .off
+        audioTitleCheckbox.isEnabled = engine.showsTitleCardBeforePlayback
+        audioTitleCheckbox.translatesAutoresizingMaskIntoConstraints = false
 
         loudnessCheckbox.target = self
         loudnessCheckbox.action = #selector(loudnessToggled)
+        loudnessCheckbox.state = engine.loudnessNormalizationEnabled ? .on : .off
         loudnessCheckbox.translatesAutoresizingMaskIntoConstraints = false
+
+        settingsTabButton.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Réglages")
+        settingsTabButton.imagePosition = .imageOnly
+        settingsTabButton.bezelStyle = .texturedRounded
+        settingsTabButton.toolTip = "Réglages"
+        settingsTabButton.target = self
+        settingsTabButton.action = #selector(settingsTabClicked)
+        settingsTabButton.translatesAutoresizingMaskIntoConstraints = false
 
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -131,51 +198,74 @@ final class MainWindowController: NSWindowController {
         statusBarSeparator.boxType = .separator
         statusBarSeparator.translatesAutoresizingMaskIntoConstraints = false
 
-        root.addSubview(openButton)
         root.addSubview(refreshButton)
         root.addSubview(autoRefreshCheckbox)
         root.addSubview(exportButton)
         root.addSubview(displayModeButton)
-        root.addSubview(stopButton)
+        root.addSubview(clearListButton)
+        root.addSubview(clearViewedButton)
         root.addSubview(filterCheckbox)
         root.addSubview(titleCardCheckbox)
+        root.addSubview(audioTitleCheckbox)
         root.addSubview(loudnessCheckbox)
+        root.addSubview(settingsTabButton)
         root.addSubview(scrollView)
+        emptyListLabel.translatesAutoresizingMaskIntoConstraints = false
+        emptyListLabel.textColor = .tertiaryLabelColor
+        emptyListLabel.alignment = .center
+        emptyListLabel.maximumNumberOfLines = 1
+        emptyListLabel.font = NSFont.systemFont(ofSize: 13)
+        emptyListLabel.isHidden = true
+        root.addSubview(emptyListLabel)
         root.addSubview(statusBarSeparator)
         root.addSubview(statusLabel)
 
         NSLayoutConstraint.activate([
-            openButton.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
-            openButton.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+            refreshButton.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
+            refreshButton.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
 
-            refreshButton.centerYAnchor.constraint(equalTo: openButton.centerYAnchor),
-            refreshButton.leadingAnchor.constraint(equalTo: openButton.trailingAnchor, constant: 8),
-
-            autoRefreshCheckbox.centerYAnchor.constraint(equalTo: openButton.centerYAnchor),
+            autoRefreshCheckbox.centerYAnchor.constraint(equalTo: refreshButton.centerYAnchor),
             autoRefreshCheckbox.leadingAnchor.constraint(equalTo: refreshButton.trailingAnchor, constant: 6),
 
-            displayModeButton.centerYAnchor.constraint(equalTo: openButton.centerYAnchor),
+            displayModeButton.centerYAnchor.constraint(equalTo: refreshButton.centerYAnchor),
             displayModeButton.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
 
-            exportButton.centerYAnchor.constraint(equalTo: openButton.centerYAnchor),
+            exportButton.centerYAnchor.constraint(equalTo: refreshButton.centerYAnchor),
             exportButton.trailingAnchor.constraint(equalTo: displayModeButton.leadingAnchor, constant: -8),
 
-            stopButton.topAnchor.constraint(equalTo: openButton.bottomAnchor, constant: 8),
-            stopButton.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+            clearViewedButton.topAnchor.constraint(equalTo: refreshButton.bottomAnchor, constant: 8),
+            clearViewedButton.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
+            clearViewedButton.heightAnchor.constraint(equalToConstant: 36),
 
-            filterCheckbox.centerYAnchor.constraint(equalTo: stopButton.centerYAnchor),
-            filterCheckbox.leadingAnchor.constraint(equalTo: stopButton.trailingAnchor, constant: 12),
+            clearListButton.centerYAnchor.constraint(equalTo: clearViewedButton.centerYAnchor),
+            clearListButton.trailingAnchor.constraint(equalTo: clearViewedButton.leadingAnchor, constant: -8),
 
-            titleCardCheckbox.topAnchor.constraint(equalTo: stopButton.bottomAnchor, constant: 8),
-            titleCardCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+            filterCheckbox.centerYAnchor.constraint(equalTo: clearListButton.centerYAnchor),
+            filterCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
 
-            loudnessCheckbox.topAnchor.constraint(equalTo: titleCardCheckbox.bottomAnchor, constant: 8),
-            loudnessCheckbox.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+            titleCardCheckbox.centerYAnchor.constraint(equalTo: filterCheckbox.centerYAnchor),
+            titleCardCheckbox.leadingAnchor.constraint(equalTo: filterCheckbox.trailingAnchor, constant: 12),
 
-            scrollView.topAnchor.constraint(equalTo: loudnessCheckbox.bottomAnchor, constant: 10),
+            audioTitleCheckbox.centerYAnchor.constraint(equalTo: titleCardCheckbox.centerYAnchor),
+            audioTitleCheckbox.leadingAnchor.constraint(equalTo: titleCardCheckbox.trailingAnchor, constant: 12),
+
+            loudnessCheckbox.centerYAnchor.constraint(equalTo: filterCheckbox.centerYAnchor),
+            loudnessCheckbox.leadingAnchor.constraint(equalTo: audioTitleCheckbox.trailingAnchor, constant: 12),
+
+            settingsTabButton.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            settingsTabButton.centerYAnchor.constraint(equalTo: root.centerYAnchor),
+            settingsTabButton.widthAnchor.constraint(equalToConstant: 30),
+            settingsTabButton.heightAnchor.constraint(equalToConstant: 84),
+
+            scrollView.topAnchor.constraint(equalTo: clearListButton.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
             scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
             scrollView.bottomAnchor.constraint(equalTo: statusBarSeparator.topAnchor, constant: -8),
+
+            emptyListLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
+            emptyListLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
+            emptyListLabel.widthAnchor.constraint(equalTo: scrollView.widthAnchor, constant: -40),
+            emptyListLabel.heightAnchor.constraint(equalToConstant: 22),
 
             statusBarSeparator.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             statusBarSeparator.trailingAnchor.constraint(equalTo: root.trailingAnchor),
@@ -187,20 +277,81 @@ final class MainWindowController: NSWindowController {
         ])
     }
 
+    private func buildEmergencyStopPanel() {
+        guard let mainWindow = window else { return }
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 88, height: 72),
+            styleMask: [.borderless, .utilityWindow],
+            backing: .buffered,
+            defer: false
+        )
+        panel.level = .floating
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.collectionBehavior = [.fullScreenAuxiliary, .canJoinAllSpaces]
+
+        stopButton.translatesAutoresizingMaskIntoConstraints = false
+        panel.contentView = NSView(frame: panel.contentRect(forFrameRect: panel.frame))
+        panel.contentView?.addSubview(stopButton)
+        NSLayoutConstraint.activate([
+            stopButton.leadingAnchor.constraint(equalTo: panel.contentView!.leadingAnchor),
+            stopButton.trailingAnchor.constraint(equalTo: panel.contentView!.trailingAnchor),
+            stopButton.topAnchor.constraint(equalTo: panel.contentView!.topAnchor),
+            stopButton.bottomAnchor.constraint(equalTo: panel.contentView!.bottomAnchor)
+        ])
+        emergencyStopPanel = panel
+        positionEmergencyStopPanel(relativeTo: mainWindow)
+        panel.orderFront(nil)
+    }
+
+    private func positionEmergencyStopPanel(relativeTo mainWindow: NSWindow) {
+        guard let panel = emergencyStopPanel else { return }
+        let frame = mainWindow.frame
+        let x = frame.midX - panel.frame.width / 2
+        let y = frame.maxY + 8
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
     // MARK: - Toggles
 
     @objc private func displayModeButtonClicked() {
         toggleDisplayMode()
     }
 
+    @objc private func settingsTabClicked() {
+        openSettings()
+    }
+
     @objc private func stopButtonClicked() {
         engine.stop()
+    }
+
+    @objc private func clearListButtonClicked() {
+        engine.stop()
+        playlist.removeAll()
+        visibleIndices.removeAll()
+        currentIndex = nil
+        latestProgress = 0
+        loadedFolderURL = nil
+        UserDefaults.standard.removeObject(forKey: lastPlaylistURLKey)
+        statusLabel.stringValue = "Aucun dossier chargé"
+        tableView.reloadData()
+        tableView.deselectAll(nil)
+        updateEmptyListState()
+    }
+
+    @objc private func clearViewedButtonClicked() {
+        playedEntryKeys.removeAll()
+        UserDefaults.standard.removeObject(forKey: playedEntriesKey)
+        tableView.reloadData()
     }
 
     @objc private func filterToggled() {
         displayFilterEnabled = (filterCheckbox.state == .on)
         recomputeVisibleIndices()
         tableView.reloadData()
+        updateEmptyListState()
         if let currentIndex = currentIndex, let visualRow = visibleIndices.firstIndex(of: currentIndex) {
             tableView.selectRowIndexes(IndexSet(integer: visualRow), byExtendingSelection: false)
         }
@@ -208,6 +359,12 @@ final class MainWindowController: NSWindowController {
 
     @objc private func titleCardToggled() {
         engine.showsTitleCardBeforePlayback = (titleCardCheckbox.state == .on)
+        audioTitleCheckbox.isEnabled = titleCardCheckbox.state == .on
+        NotificationCenter.default.post(name: .titleCardSettingChanged, object: nil)
+    }
+
+    @objc private func audioTitleToggled() {
+        engine.settings.showAudioTitle = audioTitleCheckbox.state == .on
     }
 
     @objc private func loudnessToggled() {
@@ -230,7 +387,7 @@ final class MainWindowController: NSWindowController {
 
     // MARK: - Folder loading
 
-    @objc private func openButtonClicked() {
+    @objc func openPlaylistFromMenu() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -249,8 +406,25 @@ final class MainWindowController: NSWindowController {
         currentIndex = nil
         latestProgress = 0
         loadedFolderURL = url
+        UserDefaults.standard.set(url.path, forKey: lastPlaylistURLKey)
         statusLabel.stringValue = url.path
         tableView.reloadData()
+        updateEmptyListState()
+    }
+
+    private func updateEmptyListState() {
+        emptyListLabel.isHidden = !visibleIndices.isEmpty
+    }
+
+    func restoreLastPlaylist() {
+        guard let path = UserDefaults.standard.string(forKey: lastPlaylistURLKey) else { return }
+        let url = URL(fileURLWithPath: path)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            UserDefaults.standard.removeObject(forKey: lastPlaylistURLKey)
+            return
+        }
+        loadFolder(url)
     }
 
     // MARK: - Refresh (rescans without interrupting current playback)
@@ -289,6 +463,7 @@ final class MainWindowController: NSWindowController {
         engine.remapPlayingIndex(to: playingKey.flatMap { key in playlist.firstIndex { $0.identityKey == key } })
 
         tableView.reloadData()
+        updateEmptyListState()
         if let currentIndex = currentIndex, let visualRow = visibleIndices.firstIndex(of: currentIndex) {
             tableView.selectRowIndexes(IndexSet(integer: visualRow), byExtendingSelection: false)
         } else {
@@ -326,6 +501,7 @@ final class MainWindowController: NSWindowController {
             playlist,
             to: folder,
             loudnessNormalizationEnabled: loudnessCheckbox.state == .on,
+            targetLUFS: engine.settings.targetLUFS,
             progress: { [weak self] name, completed, total, error in
                 guard let self = self else { return }
                 if let error = error {
@@ -357,9 +533,34 @@ final class MainWindowController: NSWindowController {
         engine.toggle(entry: playlist[index], at: index)
     }
 
+    @objc private func playedButtonClicked(_ sender: NSButton) {
+        let index = sender.tag
+        guard playlist.indices.contains(index) else { return }
+        let key = playlist[index].identityKey
+        if playedEntryKeys.contains(key) {
+            playedEntryKeys.remove(key)
+        } else {
+            playedEntryKeys.insert(key)
+        }
+        UserDefaults.standard.set(Array(playedEntryKeys), forKey: playedEntriesKey)
+        reloadRow(index)
+    }
+
     private func reloadRow(_ index: Int) {
         guard let visualRow = visibleIndices.firstIndex(of: index) else { return }
         tableView.reloadData(forRowIndexes: IndexSet(integer: visualRow), columnIndexes: IndexSet(integer: 0))
+    }
+}
+
+extension MainWindowController: NSWindowDelegate {
+    func windowDidMove(_ notification: Notification) {
+        guard let mainWindow = window else { return }
+        positionEmergencyStopPanel(relativeTo: mainWindow)
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        guard let mainWindow = window else { return }
+        positionEmergencyStopPanel(relativeTo: mainWindow)
     }
 }
 
@@ -384,31 +585,43 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
             let textField = NSTextField(labelWithString: "")
             textField.translatesAutoresizingMaskIntoConstraints = false
             textField.lineBreakMode = .byTruncatingMiddle
-            textField.textColor = .black
+            textField.textColor = .labelColor
             cell.addSubview(textField)
             cell.textField = textField
 
-            let button = NSButton(title: "", target: nil, action: nil)
-            button.translatesAutoresizingMaskIntoConstraints = false
-            button.bezelStyle = .rounded
-            button.imagePosition = .imageOnly
-            cell.addSubview(button)
+            let playButton = NSButton(title: "", target: nil, action: nil)
+            playButton.identifier = Self.playButtonID
+            playButton.translatesAutoresizingMaskIntoConstraints = false
+            playButton.bezelStyle = .rounded
+            playButton.imagePosition = .imageOnly
+            cell.addSubview(playButton)
+
+            let playedButton = NSButton(title: "", target: nil, action: nil)
+            playedButton.identifier = Self.playedButtonID
+            playedButton.translatesAutoresizingMaskIntoConstraints = false
+            playedButton.isBordered = false
+            playedButton.imagePosition = .imageOnly
+            cell.addSubview(playedButton)
 
             NSLayoutConstraint.activate([
                 textField.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
                 textField.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
 
-                button.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
-                button.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                button.widthAnchor.constraint(equalToConstant: 32),
+                playedButton.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
+                playedButton.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                playedButton.widthAnchor.constraint(equalToConstant: 22),
 
-                textField.trailingAnchor.constraint(lessThanOrEqualTo: button.leadingAnchor, constant: -8)
+                playButton.trailingAnchor.constraint(equalTo: playedButton.leadingAnchor, constant: -8),
+                playButton.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                playButton.widthAnchor.constraint(equalToConstant: 32),
+
+                textField.trailingAnchor.constraint(lessThanOrEqualTo: playButton.leadingAnchor, constant: -8)
             ])
         }
 
         cell.textField?.stringValue = entry.displayName
 
-        if let button = cell.subviews.compactMap({ $0 as? NSButton }).first {
+        if let button = cell.subviews.first(where: { $0.identifier == Self.playButtonID }) as? NSButton {
             let isThisRowPlaying = engine.playingIndex == actualIndex && engine.isPlaying
             let isImageEntry: Bool = {
                 if case .single(let item) = entry, item.type == .image { return true }
@@ -431,6 +644,18 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
             button.tag = actualIndex
             button.target = self
             button.action = #selector(playButtonClicked(_:))
+        }
+
+        if let playedButton = cell.subviews.first(where: { $0.identifier == Self.playedButtonID }) as? NSButton {
+            let played = playedEntryKeys.contains(entry.identityKey)
+            playedButton.image = NSImage(
+                systemSymbolName: played ? "circle.fill" : "circle",
+                accessibilityDescription: played ? "Lu" : "Non lu"
+            )
+            playedButton.contentTintColor = played ? .systemGreen : .secondaryLabelColor
+            playedButton.tag = actualIndex
+            playedButton.target = self
+            playedButton.action = #selector(playedButtonClicked(_:))
         }
 
         return cell
@@ -471,8 +696,51 @@ extension MainWindowController: PlaybackEngineDelegate {
 
     func playbackEngine(_ engine: PlaybackEngine, didUpdateProgress progress: Double, for index: Int) {
         latestProgress = progress
+        if engine.playingIndex == index {
+            engine.previewView?.updateAudioProgress(progress)
+        }
+        if progress >= 1.0, playlist.indices.contains(index) {
+            playedEntryKeys.insert(playlist[index].identityKey)
+            UserDefaults.standard.set(Array(playedEntryKeys), forKey: playedEntriesKey)
+            reloadRow(index)
+
+            let nextIndex: Int?
+            if engine.settings.autoPlayContinuous {
+                nextIndex = engine.settings.continuousSkipPlayed
+                    ? nextUnreadIndex(after: index)
+                    : nextSequentialIndex(after: index)
+            } else if engine.settings.autoAdvanceToUnread {
+                nextIndex = nextUnreadIndex(after: index)
+            } else {
+                nextIndex = nil
+            }
+            if let nextIndex = nextIndex, let visualRow = visibleIndices.firstIndex(of: nextIndex) {
+                let delay = engine.settings.autoPlayContinuous ? engine.settings.fadeDuration : 0
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    guard let self = self else { return }
+                    self.tableView.selectRowIndexes(IndexSet(integer: visualRow), byExtendingSelection: false)
+                    if self.engine.settings.autoPlayContinuous {
+                        self.engine.play(entry: self.playlist[nextIndex], at: nextIndex)
+                    }
+                }
+            }
+        }
         guard let visualRow = visibleIndices.firstIndex(of: index),
               let rowView = tableView.rowView(atRow: visualRow, makeIfNecessary: false) as? HighlightRowView else { return }
         rowView.progress = CGFloat(progress)
+    }
+
+    private func nextUnreadIndex(after index: Int) -> Int? {
+        guard let currentVisualIndex = visibleIndices.firstIndex(of: index), !visibleIndices.isEmpty else { return nil }
+        let orderedVisualIndices = Array(visibleIndices.dropFirst(currentVisualIndex + 1)) + Array(visibleIndices.prefix(currentVisualIndex + 1))
+        let orderedIndices = orderedVisualIndices.filter { $0 != index }
+        return orderedIndices.first { !playedEntryKeys.contains(playlist[$0].identityKey) }
+    }
+
+    private func nextSequentialIndex(after index: Int) -> Int? {
+        guard let currentVisualIndex = visibleIndices.firstIndex(of: index) else { return nil }
+        let nextVisualIndex = currentVisualIndex + 1
+        guard visibleIndices.indices.contains(nextVisualIndex) else { return nil }
+        return visibleIndices[nextVisualIndex]
     }
 }
