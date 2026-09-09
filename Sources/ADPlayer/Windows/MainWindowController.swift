@@ -14,8 +14,10 @@ final class MainWindowController: NSWindowController {
     private var autoRefreshTimer: Timer?
     private var localKeyMonitor: Any?
     private let lastPlaylistURLKey = "ADPlayer.lastPlaylistURL"
+    private let lastPlaylistBookmarkKey = "ADPlayer.lastPlaylistBookmark"
     private let playedEntriesKey = "ADPlayer.playedEntries"
     private var playedEntryKeys = Set<String>()
+    private var securityScopedPlaylistURL: URL?
     private var automaticTransitionScheduledForIndex: Int?
 
     var engineSettings: PlaybackSettings { engine.settings }
@@ -305,6 +307,9 @@ final class MainWindowController: NSWindowController {
         latestProgress = 0
         loadedFolderURL = nil
         UserDefaults.standard.removeObject(forKey: lastPlaylistURLKey)
+        UserDefaults.standard.removeObject(forKey: lastPlaylistBookmarkKey)
+        securityScopedPlaylistURL?.stopAccessingSecurityScopedResource()
+        securityScopedPlaylistURL = nil
         statusLabel.stringValue = "Aucun dossier chargé"
         tableView.reloadData()
         tableView.deselectAll(nil)
@@ -370,14 +375,25 @@ final class MainWindowController: NSWindowController {
         }
     }
 
-    private func loadFolder(_ url: URL) {
+    private func loadFolder(_ url: URL, preservingSecurityScope: Bool = false) {
         engine.stop()
+        if !preservingSecurityScope {
+            securityScopedPlaylistURL?.stopAccessingSecurityScopedResource()
+            securityScopedPlaylistURL = nil
+        }
         playlist = PlaylistEntry.buildEntries(fromFolder: url)
         recomputeVisibleIndices()
         currentIndex = nil
         latestProgress = 0
         loadedFolderURL = url
-        UserDefaults.standard.set(url.path, forKey: lastPlaylistURLKey)
+        if let bookmark = try? url.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        ) {
+            UserDefaults.standard.set(bookmark, forKey: lastPlaylistBookmarkKey)
+        }
+        UserDefaults.standard.removeObject(forKey: lastPlaylistURLKey)
         statusLabel.stringValue = url.path
         tableView.reloadData()
         updateEmptyListState()
@@ -388,14 +404,22 @@ final class MainWindowController: NSWindowController {
     }
 
     func restoreLastPlaylist() {
-        guard let path = UserDefaults.standard.string(forKey: lastPlaylistURLKey) else { return }
-        let url = URL(fileURLWithPath: path)
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else {
+        guard let bookmark = UserDefaults.standard.data(forKey: lastPlaylistBookmarkKey) else {
             UserDefaults.standard.removeObject(forKey: lastPlaylistURLKey)
             return
         }
-        loadFolder(url)
+        var isStale = false
+        guard let url = try? URL(
+            resolvingBookmarkData: bookmark,
+            options: [.withSecurityScope],
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        ), url.startAccessingSecurityScopedResource() else {
+            UserDefaults.standard.removeObject(forKey: lastPlaylistBookmarkKey)
+            return
+        }
+        securityScopedPlaylistURL = url
+        loadFolder(url, preservingSecurityScope: true)
     }
 
     // MARK: - Refresh (rescans without interrupting current playback)

@@ -1,6 +1,13 @@
 import Cocoa
+import WebKit
 
 final class HelpWindowController: NSWindowController {
+    private var webView: WKWebView?
+    private var editing = false
+    private var editButton: NSButton?
+    private var saveButton: NSButton?
+    private var cancelButton: NSButton?
+
     convenience init() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 620, height: 620),
@@ -12,144 +19,230 @@ final class HelpWindowController: NSWindowController {
         window.minSize = NSSize(width: 480, height: 420)
         self.init(window: window)
 
+        let editButton = NSButton(title: "Modifier", target: nil, action: nil)
+        let saveButton = NSButton(title: "Enregistrer", target: nil, action: nil)
+        let cancelButton = NSButton(title: "Annuler", target: nil, action: nil)
+        self.editButton = editButton
+        self.saveButton = saveButton
+        self.cancelButton = cancelButton
+        editButton.target = self
+        editButton.action = #selector(beginEditing)
+        saveButton.target = self
+        saveButton.action = #selector(saveEditing)
+        cancelButton.target = self
+        cancelButton.action = #selector(cancelEditing)
+        saveButton.isHidden = true
+        cancelButton.isHidden = true
+
+        let toolbar = NSStackView(views: [editButton, saveButton, cancelButton])
+        toolbar.orientation = .horizontal
+        toolbar.spacing = 8
+        toolbar.translatesAutoresizingMaskIntoConstraints = false
+
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
 
-        let textView = NSTextView()
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.drawsBackground = false
-        textView.textContainerInset = NSSize(width: 22, height: 20)
-        textView.font = NSFont.systemFont(ofSize: 13)
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.minSize = NSSize(width: 0, height: 0)
-        textView.string = Self.manualText
-        textView.textStorage?.addAttribute(
-            .foregroundColor,
-            value: NSColor.labelColor,
-            range: NSRange(location: 0, length: textView.string.utf16.count)
-        )
+        let contentView = NSView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(toolbar)
 
-        textView.frame = NSRect(x: 0, y: 0, width: 576, height: 1000)
-        textView.autoresizingMask = [.width]
-        scrollView.documentView = textView
-        window.contentView = scrollView
+        let webView = WKWebView()
+        self.webView = webView
+        webView.frame = NSRect(x: 0, y: 0, width: 576, height: 1200)
+        webView.autoresizingMask = [.width]
+        if let html = try? String(contentsOf: Self.editableHelpURL, encoding: .utf8) {
+            webView.loadHTMLString(html, baseURL: nil)
+        } else {
+            webView.loadHTMLString(Self.fallbackHTML, baseURL: nil)
+        }
+        scrollView.documentView = webView
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(scrollView)
+        window.contentView = contentView
         NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: window.contentView!.topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor)
+            toolbar.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
+            toolbar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
+            toolbar.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -12),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 8),
+            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
         ])
+
+    }
+
+    @objc private func beginEditing(_ sender: NSButton) {
+        editing = true
+        webView?.evaluateJavaScript("document.body.contentEditable='true'; document.body.style.outline='2px solid #4c9ffe'; document.body.focus();", completionHandler: nil)
+        sender.isHidden = true
+        saveButton?.isHidden = false
+        cancelButton?.isHidden = false
+    }
+
+    @objc private func saveEditing(_ sender: NSButton) {
+        webView?.evaluateJavaScript("document.documentElement.outerHTML") { [weak self] result, _ in
+            guard let self = self, let html = result as? String else { return }
+            try? FileManager.default.createDirectory(at: Self.applicationSupportDirectory, withIntermediateDirectories: true, attributes: nil)
+            try? html.write(to: Self.applicationSupportHelpURL, atomically: true, encoding: .utf8)
+            self.finishEditing(loadSavedContent: true)
+        }
+    }
+
+    @objc private func cancelEditing(_ sender: NSButton) {
+        finishEditing(loadSavedContent: true)
+    }
+
+    private func finishEditing(loadSavedContent: Bool) {
+        editing = false
+        webView?.evaluateJavaScript("document.body.contentEditable='false'; document.body.style.outline='none';", completionHandler: nil)
+        editButton?.isHidden = false
+        saveButton?.isHidden = true
+        cancelButton?.isHidden = true
+        guard loadSavedContent,
+              let html = try? String(contentsOf: Self.editableHelpURL, encoding: .utf8) else { return }
+        webView?.loadHTMLString(html, baseURL: nil)
     }
 
     private static let manualText = """
-    AD-PLAYER — MODE D'EMPLOI
+    AD-PLAYER — BIENVENUE
 
-    1. Raccourcis clavier
+    AD-PLAYER est un lecteur de playlist pensé pour enchaîner simplement des
+    vidéos, des sons et des images. Cette page vous accompagne dans les gestes
+    essentiels. Les commandes sont regroupées par usage, afin de retrouver
+    rapidement ce dont vous avez besoin.
 
-    Cmd-O       Ouvre le sélecteur de dossier média.
-    Cmd-R       Ouvre le tiroir Réglages.
-    Échap       Déclenche le STOP d'urgence.
-    Espace      Lance, met en pause ou reprend le média sélectionné.
-    Cmd-Q       Quitte AD-PLAYER.
+    RACCOURCIS
 
-    2. Fenêtre Playlist
+    Cmd-O       Choisir un dossier de médias.
+    Cmd-R       Ouvrir le tiroir Réglages.
+    Échap       Arrêter immédiatement la lecture.
+    Espace      Lire, mettre en pause ou reprendre la ligne sélectionnée.
+    Cmd-Q       Quitter l'application.
 
-    La fenêtre Playlist est le centre de contrôle de l'application. Elle liste
-    les vidéos, les audios et les images du dossier chargé. Une ligne contient
-    le nom du média, un bouton PLAY/PAUSE/STOP et un cercle d'état de lecture.
-    La bordure colorée et son remplissage indiquent le média actif et sa durée.
+    LA PLAYLIST
 
-    3. Charger des médias
+    La fenêtre Playlist rassemble les médias du dossier actuellement chargé.
+    Chaque ligne affiche un nom, un bouton de lecture et un cercle de suivi.
+    La bordure colorée accompagne le média actif; son remplissage indique sa
+    progression. Un seul média est lu à la fois : lancer une autre ligne arrête
+    la précédente avant de démarrer la nouvelle.
 
-    Glissez-déposez des fichiers ou un dossier dans la fenêtre Playlist.
-    Vous pouvez aussi utiliser Cmd-O. Le dernier dossier utilisé est mémorisé
-    et restauré au prochain lancement. Clear list arrête la lecture, vide la
-    Playlist et oublie le dernier dossier chargé.
+    CHARGER UN DOSSIER
 
-    4. Les deux lignes de commandes
+    Déposez un dossier ou des fichiers directement dans la Playlist. Vous pouvez
+    aussi utiliser Cmd-O. Le dernier dossier utilisé est mémorisé et restauré
+    au prochain lancement. Si aucun dossier n'est chargé, déposez simplement
+    vos médias dans la fenêtre.
+
+    LES COMMANDES DE LA PLAYLIST
 
     Première ligne :
-    Refresh          Rescanne immédiatement le dossier chargé.
-    Auto-refresh     Actualise automatiquement la Playlist lorsque le dossier change.
-    Export           Ouvre le choix du dossier de destination, puis exporte
-                     chaque duo vidéo/audio en fichier MP4.
-    Mode fenêtré     Bascule Preview entre plein écran et fenêtre normale.
+    Refresh          Relire immédiatement le contenu du dossier.
+    Auto-refresh     Surveiller le dossier et actualiser la liste automatiquement.
+    Export           Choisir un dossier puis créer les fichiers MP4 exportés.
+    Mode fenêtré     Passer Preview du plein écran à une fenêtre normale.
 
     Deuxième ligne :
-    Filtrer Duos     Affiche les duos et les images autonomes.
-    Amorce titrée    Affiche le nom du média avant une vidéo ou un duo.
+    Filtrer Duos     N'afficher que les duos et les images autonomes.
+    Amorce titrée    Afficher le nom avant le démarrage d'une vidéo ou d'un duo.
     Audio seul compris
-                     Autorise le nom des MP3/WAV seuls dans l'amorce.
+                     Autoriser le nom des WAV/MP3 seuls dans l'amorce.
     Normaliser le LUFS
-                     Active la correction de niveau pendant la lecture.
-    Clear viewed     Remet tous les cercles verts à l'état non lu.
-    Clear list       Vide la Playlist et efface son dossier mémorisé.
+                     Activer la correction de niveau pendant la lecture et l'export.
+    Clear viewed     Effacer tous les cercles verts, sans supprimer la liste.
+    Clear list       Arrêter la lecture, vider la liste et oublier le dossier.
 
-    Le gros bouton STOP du tiroir Réglages arrête immédiatement la lecture.
-    Il est centré sous les réglages et possède un cadre rouge pour être repéré
-    rapidement. Échap déclenche la même commande.
+    Le gros bouton STOP, placé dans le tiroir Réglages, arrête immédiatement
+    le média en cours et remet Preview au noir. Échap déclenche la même action.
 
-    5. Nommer et utiliser les duos
+    LES DUOS
 
-    Les DUOS sont des fichiers MP4, MOV, WAV et MP3 nommés de manière identique.
-    Exemple :
+    Un duo associe une vidéo et son fichier audio séparé. Pour qu'ils soient
+    reconnus, les deux fichiers doivent partager exactement le même nom de base :
+
     Groupe 1.mov
     Groupe 1.wav
 
-    Quand ces fichiers sont reconnus par l'application, ils sont considérés
-    comme un DUO. Le flux vidéo MOV ou MP4 est projeté et l'audio WAV ou MP3 est
-    synchronisé avec la vidéo. Le bouton Export assemble la vidéo et le son en
-    un seul fichier MP4, avec correction LUFS si elle est activée.
+    Les extensions vidéo acceptées sont MOV et MP4; les extensions audio sont
+    WAV et MP3. La vidéo est projetée, tandis que l'audio séparé est synchronisé
+    avec elle. Un duo apparaît comme une seule ligne dans la Playlist.
 
-    Les extensions prises en charge sont MP4, MOV, WAV, MP3, JPG, JPEG et PNG.
+    Avec Export, AD-PLAYER assemble la vidéo et l'audio dans un fichier MP4.
+    La correction LUFS choisie est appliquée si Normaliser le LUFS est activé.
 
-    6. Commandes de lecture
+    LECTURE ET SUIVI
 
     Cliquez sur PLAY pour lancer un média. Le bouton devient PAUSE pendant la
-    lecture. Pour une image, il devient STOP. Lancer un autre média arrête le
-    précédent avant de commencer le nouveau.
+    lecture. Pour une image, il devient STOP. Le cercle situé à droite devient
+    vert lorsque le média arrive à sa fin. Cliquez sur le cercle pour le remettre
+    à l'état non lu; Clear viewed les remet tous à zéro.
 
-    Le cercle à droite devient vert lorsque le média est lu jusqu'à la fin.
-    Cliquez dessus pour le repasser manuellement à l'état non lu.
+    Pour un audio seul, Preview affiche une barre de progression. Pour une image
+    ou une vidéo, le fondu suit la valeur choisie dans Réglages, et le son suit
+    la même transition. Les images PNG, JPG et JPEG sont acceptées.
 
-    Pour un audio seul, Preview affiche une barre de progression horizontale.
-    Pour une image ou une vidéo, le fondu visuel suit la valeur réglée dans le
-    tiroir Réglages. L'audio suit également une rampe de volume.
+    LE TIROIR RÉGLAGES
 
-    7. Réglages
-
-    Ouvrez le tiroir avec le bouton engrenage situé sur la fenêtre Playlist,
-    le menu AD-PLAYER > Réglages… ou Cmd-R. Le bouton Fermer referme le tiroir.
-    Le tiroir reste non modal : la Playlist reste utilisable pendant les réglages.
+    Ouvrez-le avec le bouton engrenage de la Playlist, AD-PLAYER > Réglages…
+    ou Cmd-R. Il reste non modal : vous pouvez continuer à utiliser la Playlist.
+    Fermer referme le tiroir.
 
     Durée du titre       Durée de l'amorce, de 0,3 à 5,0 secondes.
-    Noir suivant          Durée du noir après le titre, de 0,5 à 2,0 secondes.
-    Cible LUFS            Niveau cible, de -25 à -13 LUFS.
+    Noir suivant          Durée du noir après l'amorce, de 0,5 à 2,0 secondes.
+    Cible LUFS            Niveau visé, de -25 à -13 LUFS.
     Fondu au noir         Fondu des médias, de 0,0 à 2,0 secondes.
     Style                 Clair, Sombre ou Système.
 
     Le fondu des titres est fixe à 0,5 seconde. Le réglage Fondu au noir ne
-    concerne que les médias et reste indépendant de l'amorce.
+    change que le fondu des médias. Les réglages sont mémorisés après fermeture.
 
     Sélectionner automatiquement le clip non lu suivant sélectionne le prochain
-    média non lu sans lancer sa lecture.
+    clip non lu, sans démarrer sa lecture. Lancer automatiquement les clips pour
+    une lecture continue enchaîne les médias. Vous pouvez alors choisir Ignorer
+    les clips déjà lus ou Lire tous les clips.
 
-    Lancer automatiquement les clips pour une lecture continue enchaîne les
-    médias. Le menu Mode permet alors de choisir Ignorer les clips déjà lus ou
-    Lire tous les clips. Tous ces réglages sont mémorisés après fermeture.
-
-    8. Fenêtre Preview et export
+    PREVIEW ET EXPORT
 
     Preview s'ouvre par défaut en plein écran. Mode fenêtré conserve l'écran
-    courant. Le menu Fenêtre rappelle Playlist ou Preview au premier plan.
+    utilisé. Le menu Fenêtre permet de rappeler Playlist ou Preview au premier
+    plan.
 
-    Export ouvre d'abord un sélecteur de dossier. Après validation, un MP4 est
-    créé pour chaque duo vidéo/audio dans le dossier choisi. La normalisation
-    active est appliquée à l'export.
+    Export ouvre un sélecteur de dossier. Après validation, un fichier MP4 est
+    créé pour chaque duo. Le niveau LUFS choisi est appliqué à l'export lorsque
+    Normaliser le LUFS est activé.
+
+    À PROPOS DE CETTE AIDE
+
+    Cette première version est volontairement simple. Elle sera transformée
+    en guide à sections cliquables, avec une table des matières et des liens
+    vers les explications détaillées.
+    """
+
+    private static var helpURL: URL {
+        Bundle.main.url(forResource: "Help", withExtension: "html") ?? URL(fileURLWithPath: "/dev/null")
+    }
+
+    private static var applicationSupportDirectory: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("AD-PLAYER", isDirectory: true)
+    }
+
+    private static var applicationSupportHelpURL: URL {
+        applicationSupportDirectory.appendingPathComponent("Help.html")
+    }
+
+    private static var editableHelpURL: URL {
+        FileManager.default.fileExists(atPath: applicationSupportHelpURL.path)
+            ? applicationSupportHelpURL
+            : helpURL
+    }
+
+    private static let fallbackHTML = """
+    <!doctype html><html lang="fr"><meta charset="utf-8"><body>
+    <h1>AD-PLAYER - Mode d'emploi</h1>
+    <p>Le fichier Help.html est introuvable à côté de l'application.</p>
+    </body></html>
     """
 }

@@ -32,6 +32,11 @@ mkdir -p "$APP_DIR/Contents/Resources"
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 chmod +x "$APP_DIR/Contents/MacOS/$APP_NAME"
 
+if [ -f "$ROOT_DIR/Help.html" ]; then
+  cp "$ROOT_DIR/Help.html" "$DIST_DIR/Help.html"
+  cp "$ROOT_DIR/Help.html" "$APP_DIR/Contents/Resources/Help.html"
+fi
+
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
