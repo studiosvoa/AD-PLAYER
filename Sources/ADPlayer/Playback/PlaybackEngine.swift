@@ -54,7 +54,8 @@ final class PlaybackEngine: NSObject {
             }
 
         case .pairedVideoAudio(_, let videoURL, let audioURL):
-            guard let newPlayer = Self.makeSyncedPlayer(videoURL: videoURL, audioURL: audioURL) else { return }
+            guard let composition = SyncedComposition.build(videoURL: videoURL, audioURL: audioURL) else { return }
+            let newPlayer = AVPlayer(playerItem: AVPlayerItem(asset: composition))
             player = newPlayer
             previewView?.showVideo(player: newPlayer)
             observeEnd(of: newPlayer, index: index)
@@ -65,31 +66,10 @@ final class PlaybackEngine: NSObject {
         delegate?.playbackEngine(self, didUpdateIndex: index)
     }
 
-    /// Builds a single-timeline player combining the video's picture track with
-    /// the paired audio file's track (the video's own audio track is left out
-    /// entirely), so the two are frame-accurately in sync from one play() call.
-    private static func makeSyncedPlayer(videoURL: URL, audioURL: URL) -> AVPlayer? {
-        let videoAsset = AVURLAsset(url: videoURL)
-        let audioAsset = AVURLAsset(url: audioURL)
-        guard let videoTrack = videoAsset.tracks(withMediaType: .video).first,
-              let audioTrack = audioAsset.tracks(withMediaType: .audio).first else { return nil }
-
-        let composition = AVMutableComposition()
-        guard let compVideoTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid),
-              let compAudioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { return nil }
-
-        let duration = min(videoAsset.duration, audioAsset.duration)
-        let range = CMTimeRange(start: .zero, duration: duration)
-
-        do {
-            try compVideoTrack.insertTimeRange(range, of: videoTrack, at: .zero)
-            try compAudioTrack.insertTimeRange(range, of: audioTrack, at: .zero)
-        } catch {
-            return nil
-        }
-        compVideoTrack.preferredTransform = videoTrack.preferredTransform
-
-        return AVPlayer(playerItem: AVPlayerItem(asset: composition))
+    /// Re-associates the currently loaded item with its new row index after the
+    /// playlist has been refreshed, without touching the player or its state.
+    func remapPlayingIndex(to newIndex: Int?) {
+        playingIndex = newIndex
     }
 
     private func togglePause() {

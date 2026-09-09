@@ -7,10 +7,14 @@ final class MainWindowController: NSWindowController {
     private var playlist: [PlaylistEntry] = []
     private var currentIndex: Int?
     private var loadedFolderURL: URL?
+    private var autoRefreshTimer: Timer?
 
     private let tableView = PlaylistTableView()
     private let statusLabel = NSTextField(labelWithString: "Aucun dossier chargé")
     private let openButton = NSButton(title: "OPEN", target: nil, action: nil)
+    private let refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
+    private let autoRefreshCheckbox = NSButton(checkboxWithTitle: "Auto", target: nil, action: nil)
+    private let exportButton = NSButton(title: "Export", target: nil, action: nil)
     private let displayModeButton = NSButton(title: "Mode fenêtré", target: nil, action: nil)
 
     private static let mediaColumnID = NSUserInterfaceItemIdentifier("media")
@@ -56,6 +60,20 @@ final class MainWindowController: NSWindowController {
         openButton.action = #selector(openButtonClicked)
         openButton.translatesAutoresizingMaskIntoConstraints = false
 
+        refreshButton.bezelStyle = .rounded
+        refreshButton.target = self
+        refreshButton.action = #selector(refreshButtonClicked)
+        refreshButton.translatesAutoresizingMaskIntoConstraints = false
+
+        autoRefreshCheckbox.target = self
+        autoRefreshCheckbox.action = #selector(autoRefreshToggled)
+        autoRefreshCheckbox.translatesAutoresizingMaskIntoConstraints = false
+
+        exportButton.bezelStyle = .rounded
+        exportButton.target = self
+        exportButton.action = #selector(exportButtonClicked)
+        exportButton.translatesAutoresizingMaskIntoConstraints = false
+
         displayModeButton.bezelStyle = .rounded
         displayModeButton.target = self
         displayModeButton.action = #selector(displayModeButtonClicked)
@@ -90,6 +108,9 @@ final class MainWindowController: NSWindowController {
         statusBarSeparator.translatesAutoresizingMaskIntoConstraints = false
 
         root.addSubview(openButton)
+        root.addSubview(refreshButton)
+        root.addSubview(autoRefreshCheckbox)
+        root.addSubview(exportButton)
         root.addSubview(displayModeButton)
         root.addSubview(scrollView)
         root.addSubview(statusBarSeparator)
@@ -99,8 +120,17 @@ final class MainWindowController: NSWindowController {
             openButton.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
             openButton.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
 
+            refreshButton.centerYAnchor.constraint(equalTo: openButton.centerYAnchor),
+            refreshButton.leadingAnchor.constraint(equalTo: openButton.trailingAnchor, constant: 8),
+
+            autoRefreshCheckbox.centerYAnchor.constraint(equalTo: openButton.centerYAnchor),
+            autoRefreshCheckbox.leadingAnchor.constraint(equalTo: refreshButton.trailingAnchor, constant: 6),
+
             displayModeButton.centerYAnchor.constraint(equalTo: openButton.centerYAnchor),
             displayModeButton.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
+
+            exportButton.centerYAnchor.constraint(equalTo: openButton.centerYAnchor),
+            exportButton.trailingAnchor.constraint(equalTo: displayModeButton.leadingAnchor, constant: -8),
 
             scrollView.topAnchor.constraint(equalTo: openButton.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
@@ -144,6 +174,88 @@ final class MainWindowController: NSWindowController {
         loadedFolderURL = url
         statusLabel.stringValue = url.path
         tableView.reloadData()
+    }
+
+    // MARK: - Refresh (rescans without interrupting current playback)
+
+    @objc private func refreshButtonClicked() {
+        refreshPlaylist()
+    }
+
+    @objc private func autoRefreshToggled() {
+        if autoRefreshCheckbox.state == .on {
+            autoRefreshTimer?.invalidate()
+            autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                self?.refreshPlaylist()
+            }
+        } else {
+            autoRefreshTimer?.invalidate()
+            autoRefreshTimer = nil
+        }
+    }
+
+    /// Rescans the loaded folder and merges new/removed files into the playlist.
+    /// Never touches the playback engine's player, only remaps its row index
+    /// so an in-progress playback keeps its correct PLAY/STOP icon and ring.
+    private func refreshPlaylist() {
+        guard let folder = loadedFolderURL else { return }
+
+        let currentKey = currentIndex.flatMap { playlist.indices.contains($0) ? playlist[$0].identityKey : nil }
+        let playingKey = engine.playingIndex.flatMap { playlist.indices.contains($0) ? playlist[$0].identityKey : nil }
+
+        let newPlaylist = PlaylistEntry.buildEntries(fromFolder: folder)
+        guard newPlaylist.map(\.identityKey) != playlist.map(\.identityKey) else { return }
+
+        playlist = newPlaylist
+        currentIndex = currentKey.flatMap { key in playlist.firstIndex { $0.identityKey == key } }
+        engine.remapPlayingIndex(to: playingKey.flatMap { key in playlist.firstIndex { $0.identityKey == key } })
+
+        tableView.reloadData()
+        if let currentIndex = currentIndex {
+            tableView.selectRowIndexes(IndexSet(integer: currentIndex), byExtendingSelection: false)
+        } else {
+            tableView.deselectAll(nil)
+        }
+    }
+
+    // MARK: - Export (paired/red entries -> single .mp4 per entry)
+
+    @objc private func exportButtonClicked() {
+        guard playlist.contains(where: { $0.isPaired }) else {
+            let alert = NSAlert()
+            alert.messageText = "Aucun fichier composé (liseré rouge) à exporter."
+            alert.alertStyle = .informational
+            alert.beginSheetModal(for: window!)
+            return
+        }
+
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Exporter ici"
+        panel.beginSheetModal(for: window!) { [weak self] response in
+            guard response == .OK, let folder = panel.url else { return }
+            self?.beginExport(to: folder)
+        }
+    }
+
+    private func beginExport(to folder: URL) {
+        exportButton.isEnabled = false
+        let restoredStatus = loadedFolderURL?.path ?? statusLabel.stringValue
+
+        PlaylistExporter.exportPairedEntries(playlist, to: folder, progress: { [weak self] name, completed, total, error in
+            guard let self = self else { return }
+            if let error = error {
+                self.statusLabel.stringValue = "Export \(completed)/\(total) — erreur sur \(name) : \(error.localizedDescription)"
+            } else {
+                self.statusLabel.stringValue = "Export \(completed)/\(total) — \(name) terminé"
+            }
+        }, completion: { [weak self] in
+            guard let self = self else { return }
+            self.exportButton.isEnabled = true
+            self.statusLabel.stringValue = restoredStatus
+        })
     }
 
     // MARK: - Playback control

@@ -22,6 +22,16 @@ enum PlaylistEntry {
         return false
     }
 
+    /// Stable identity used to re-locate this entry after a playlist refresh.
+    var identityKey: String {
+        switch self {
+        case .single(let item):
+            return "single:\(item.url.path)"
+        case .pairedVideoAudio(_, let videoURL, let audioURL):
+            return "paired:\(videoURL.path)|\(audioURL.path)"
+        }
+    }
+
     /// Scans a folder, then merges any video (.mp4/.mov) with a .wav or .mp3 file
     /// sharing the same base name into a single paired entry.
     static func buildEntries(fromFolder folderURL: URL) -> [PlaylistEntry] {
