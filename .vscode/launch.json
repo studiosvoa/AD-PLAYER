@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:AD-PLAYER}",
+            "name": "Debug ADPlayer",
+            "target": "ADPlayer",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug ADPlayer"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:AD-PLAYER}",
+            "name": "Release ADPlayer",
+            "target": "ADPlayer",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release ADPlayer"
+        }
+    ]
+}
