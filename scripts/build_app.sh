@@ -6,7 +6,7 @@
 # the app comes from an unidentified developer (expected for internal use).
 set -euo pipefail
 
-APP_NAME="AD-PLAYER"
+APP_NAME="AD Player 26.09"
 EXECUTABLE_NAME="ADPlayer"
 BUNDLE_ID="com.studiosvoa.adplayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,7 +16,7 @@ APP_DIR="$DIST_DIR/$APP_NAME.app"
 
 cd "$ROOT_DIR"
 rm -f "$DIST_DIR/Help.html"
-rm -f "$DIST_DIR/AD-PLAYER.zip" "$DIST_DIR/.DS_Store"
+rm -f "$DIST_DIR/AD Player 26.09.zip" "$DIST_DIR/.DS_Store"
 echo "==> Building release binary..."
 swift build -c release
 
@@ -31,11 +31,15 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
 
-cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
-chmod +x "$APP_DIR/Contents/MacOS/$APP_NAME"
+cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$EXECUTABLE_NAME"
+chmod +x "$APP_DIR/Contents/MacOS/$EXECUTABLE_NAME"
 
 if [ -f "$ROOT_DIR/Help.html" ]; then
   cp "$ROOT_DIR/Help.html" "$APP_DIR/Contents/Resources/Help.html"
+fi
+
+if [ -f "$ROOT_DIR/LOGO-AD.png" ]; then
+  cp "$ROOT_DIR/LOGO-AD.png" "$APP_DIR/Contents/Resources/LOGO-AD.png"
 fi
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
@@ -50,13 +54,15 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <key>CFBundleIdentifier</key>
     <string>$BUNDLE_ID</string>
     <key>CFBundleExecutable</key>
-    <string>$APP_NAME</string>
+    <string>$EXECUTABLE_NAME</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>26.09</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>26.09</string>
+    <key>CFBundleIconFile</key>
+    <string>LOGO-AD.png</string>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
     <key>LSApplicationCategoryType</key>
@@ -72,6 +78,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 PLIST
 
 echo "==> Ad-hoc signing (unsigned, internal use only)..."
+xattr -cr "$APP_DIR"
 codesign --force --deep --sign - "$APP_DIR"
 
 echo "==> Done: $APP_DIR"

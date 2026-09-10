@@ -25,7 +25,7 @@ final class PlaybackEngine: NSObject {
 
     /// When true, standalone audio files and paired entries' audio track are
     /// gain-corrected toward -18 LUFS (see LoudnessCache).
-    var loudnessNormalizationEnabled = false {
+    var loudnessNormalizationEnabled: Bool {
         didSet { UserDefaults.standard.set(loudnessNormalizationEnabled, forKey: "ADPlayer.loudnessNormalizationEnabled") }
     }
 

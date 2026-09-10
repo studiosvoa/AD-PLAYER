@@ -36,7 +36,14 @@ enum PlaylistEntry {
     /// sharing the same base name into a single paired entry.
     static func buildEntries(fromFolder folderURL: URL) -> [PlaylistEntry] {
         let items = MediaItem.loadFolder(folderURL)
+        return buildEntries(from: items)
+    }
 
+    static func buildEntries(fromURLs urls: [URL]) -> [PlaylistEntry] {
+        buildEntries(from: urls.compactMap(MediaItem.init(url:)))
+    }
+
+    private static func buildEntries(from items: [MediaItem]) -> [PlaylistEntry] {
         var groupsByBaseName: [String: [MediaItem]] = [:]
         for item in items {
             let base = item.url.deletingPathExtension().lastPathComponent.lowercased()

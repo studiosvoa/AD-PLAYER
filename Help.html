@@ -1,6 +1,4 @@
-<!doctype html>
-<html lang="fr">
-<head>
+<html lang="fr"><head>
 <meta charset="utf-8">
 <title>AD-PLAYER - Mode d'emploi</title>
 <style>
@@ -19,18 +17,16 @@ pre { padding: 14px; border-radius: 6px; background: #8882; overflow-x: auto; }
 @media (max-width: 600px) { body { padding: 24px 20px; } .command { grid-template-columns: 1fr; gap: 2px; } }
 </style>
 </head>
-<body>
+<body contenteditable="true" style="outline: rgb(76, 159, 254) solid 2px;">
 <main>
-<h1>AD-PLAYER - Bienvenue</h1>
-<p>AD-PLAYER est un lecteur de playlist pour enchaîner simplement des vidéos, des sons et des images.</p>
+<h1>AD-PLAYER 26.09</h1>
+<p>AD-PLAYER est un lecteur de playlist pour enchaîner simplement des vidéos, des sons et des images à destination de projection.</p>
 
 <nav aria-label="Sommaire">
 <strong>Dans ce guide</strong>
 <a href="#raccourcis">Raccourcis</a>
 <a href="#playlist">La Playlist</a>
-<a href="#charger">Charger des médias</a>
-<a href="#commandes">Les commandes</a>
-<a href="#duos">Les DUOS</a>
+<a href="#charger">Charger des médias</a><a href="#charger"><a href="#duos" style="display: inline !important;">Les DUOS</a></a><a href="#charger"><a href="#commandes" style="display: inline !important;">Les commandes</a></a>
 <a href="#lecture">Lecture et suivi</a>
 <a href="#reglages">Réglages</a>
 <a href="#preview">Preview et Export</a>
@@ -38,7 +34,7 @@ pre { padding: 14px; border-radius: 6px; background: #8882; overflow-x: auto; }
 
 <h2 id="raccourcis">Raccourcis</h2>
 <div class="command">
-<strong>Cmd-O</strong><span>Choisir un dossier de médias.</span>
+<strong>Cmd-O</strong><span>Choisir un dossier ou un ou plusieurs fichiers de médias.</span>
 <strong>Cmd-R</strong><span>Ouvrir le tiroir Réglages.</span>
 <strong>Échap</strong><span>Arrêter immédiatement la lecture.</span>
 <strong>Espace</strong><span>Lire, mettre en pause ou reprendre la ligne sélectionnée.</span>
@@ -46,57 +42,53 @@ pre { padding: 14px; border-radius: 6px; background: #8882; overflow-x: auto; }
 </div>
 
 <h2 id="playlist">La Playlist</h2>
-<p>La fenêtre Playlist rassemble les médias du dossier chargé. Chaque ligne affiche un nom, un bouton de lecture et un cercle de suivi. Une seule ligne est lue à la fois : lancer une autre ligne arrête la précédente.</p>
+<p>La fenêtre Playlist rassemble les médias du dossier chargé.</p><p>Chaque ligne affiche un nom, un bouton de lecture et un cercle de suivi qui passe en vert lorsque le clip a déjà été lu en entier.</p><p>Une seule ligne est lue à la fois : lancer une autre ligne arrête la précédente.</p>
 
 <h2 id="charger">Charger des médias</h2>
-<p>Déposez un dossier ou des fichiers directement dans la Playlist, ou utilisez <strong>Cmd-O</strong>. Le dernier dossier utilisé est mémorisé et restauré au prochain lancement.</p>
+<p>Déposez un dossier ou des fichiers directement dans la Playlist, ou utilisez <strong>Cmd-O</strong>. Les fichiers acceptés sont MP4, MOV, WAV, MP3, JPG, JPEG et PNG. Le dernier dossier utilisé est mémorisé et restauré au prochain lancement.</p><p>Charger un nouveau dossier efface la playlist en cours.</p><p>Ajouter et retirer des fichiers est possible individuellement.</p>
 
-<h2 id="commandes">Les commandes</h2>
-<h3>Première ligne</h3>
+<h2 id="duos">Les DUOS</h2><p>Un duo associe une vidéo et son fichier audio séparé. Les deux fichiers doivent partager exactement le même nom de base :</p><pre>Groupe 1.mov
+Groupe 1.wav</pre><p>Les formats vidéo acceptés sont MOV et MP4; les formats audio sont WAV et MP3.</p><p>La vidéo est projetée et l'audio séparé est synchronisé avec elle. Un duo apparaît comme une seule ligne dans la Playlist.</p><p><strong>Export</strong>&nbsp;assemble la vidéo et l'audio dans un fichier MP4 en 25 i/s. La correction LUFS est appliquée si elle est activée.</p><h2 id="commandes">Les commandes</h2>
+<h3>1.</h3>
 <div class="command">
-<strong>Refresh</strong><span>Relire immédiatement le contenu du dossier.</span>
-<strong>Auto-refresh</strong><span>Actualiser automatiquement la liste lorsque le dossier change.</span>
+<strong>Refresh</strong><span>Rafraîchir manuellement la liste en fonction du contenu du dossier.</span>
+<strong>Auto-refresh</strong><span>Rafraîchir automatiquement la liste toutes les secondes.</span>
 <strong>Export</strong><span>Choisir un dossier puis créer les fichiers MP4 exportés.</span>
-<strong>Mode fenêtré</strong><span>Passer Preview du plein écran à une fenêtre normale.</span>
+<strong>Mode fenêtré</strong><span>Passer l’écran de visionnage du plein écran à une fenêtre normale.</span>
 </div>
-<h3>Deuxième ligne</h3>
+<h3>2.</h3>
 <div class="command">
 <strong>Filtrer Duos</strong><span>N'afficher que les duos et les images autonomes.</span>
-<strong>Amorce titrée</strong><span>Afficher le nom avant une vidéo ou un duo.</span>
-<strong>Audio seul compris</strong><span>Autoriser le nom des WAV/MP3 seuls dans l'amorce.</span>
+<strong>Amorce titrée</strong><span>Afficher le nom du média avant une vidéo ou un duo.</span>
+<strong>Audio seul compris</strong><span>Autoriser aussi l’affichage des noms des WAV/MP3 dans l'amorce.</span>
 <strong>Normaliser le LUFS</strong><span>Activer la correction de niveau pendant la lecture et l'export.</span>
-<strong>Clear viewed</strong><span>Effacer les cercles verts, sans supprimer la liste.</span>
-<strong>Clear list</strong><span>Arrêter la lecture, vider la liste et oublier le dossier.</span>
+<strong>Clear viewed</strong><span>Réinitialise tous les cercles verts à l’état "non-lu".</span>
+<strong>Clear list</strong><span>Arrêter la lecture et vider la liste.</span>
+<strong>Suppr / Delete</strong><span>Retirer le média sélectionné de la liste; l'icône poubelle a la même action.</span><span><br></span>
 </div>
-<p>Le bouton STOP d'urgence se trouve dans le tiroir Réglages, sous les options. Il arrête immédiatement la lecture. La touche Échap déclenche la même action.</p>
+<p>Le bouton STOP général se trouve dans le tiroir Réglages. Il arrête immédiatement la lecture. La touche Échap déclenche la même action.</p>
 
-<h2 id="duos">Les DUOS</h2>
-<p>Un duo associe une vidéo et son fichier audio séparé. Les deux fichiers doivent partager exactement le même nom de base :</p>
-<pre>Groupe 1.mov
-Groupe 1.wav</pre>
-<p>Les formats vidéo acceptés sont MOV et MP4; les formats audio sont WAV et MP3. La vidéo est projetée et l'audio séparé est synchronisé avec elle. Un duo apparaît comme une seule ligne dans la Playlist.</p>
-<p><strong>Export</strong> assemble la vidéo et l'audio dans un fichier MP4. La correction LUFS est appliquée si elle est activée.</p>
-
-<h2 id="lecture">Lecture et suivi</h2>
-<p>Cliquez sur PLAY pour lancer un média. Le bouton devient PAUSE pendant la lecture. Le cercle devient vert lorsque le média arrive à sa fin; cliquez dessus pour le remettre à l'état non lu.</p>
-<p>Pour un audio seul, Preview affiche une barre de progression. Pour une image ou une vidéo, le fondu suit la valeur choisie dans Réglages.</p>
+<h2 id="duos"><span style="font-weight: normal;">Lecture et suivi</span></h2>
+<p>Cliquez sur PLAY pour lancer un média. Le cercle devient vert lorsque le média arrive à sa fin; cliquez dessus pour le remettre à l'état non lu.</p>
+<p>Pour un audio seul, Preview affiche une barre de lecture.</p><p>Un fondu au noir d’entrée est de sortie est réglabe dans Réglages.</p>
 
 <h2 id="reglages">Réglages</h2>
-<p>Ouvrez le tiroir avec le bouton engrenage, le menu <strong>AD-PLAYER &gt; Réglages…</strong> ou <strong>Cmd-R</strong>. Le tiroir reste non modal et la Playlist reste utilisable.</p>
+<p>Ouvrez le tiroir avec la flèche/accolade sur la droite, le menu <strong>AD-PLAYER &gt; Réglages…</strong> ou <strong>Cmd-R</strong>.</p>
 <div class="command">
-<strong>Durée du titre</strong><span>De 0,3 à 5,0 secondes.</span>
-<strong>Noir suivant</strong><span>De 0,5 à 2,0 secondes.</span>
-<strong>Cible LUFS</strong><span>De -25 à -13 LUFS.</span>
-<strong>Fondu au noir</strong><span>Fondu des médias, de 0,0 à 2,0 secondes.</span>
+<strong>Durée du titre</strong><span>De 0,3 à 5,0 secondes, affiche le nom du clip.</span>
+<strong>Noir suivant</strong><span>De 0,5 à 2,0 secondes, ajoute un noir entre le titre et le démarrage du clip.</span>
+<strong>Cible LUFS</strong><span>De -25 à -13 LUFS, pour la normalisation en lecture et en export.</span>
+<strong>Fondu au noir</strong><span>De 0,0 à 2,0 secondes, fondu d’entrée et de sortie des clips</span>
 <strong>Style</strong><span>Clair, Sombre ou Système.</span>
 </div>
-<p>Le fondu des titres est fixe à 0,5 seconde. Le réglage Fondu au noir concerne uniquement les médias.</p>
+<p>Le fondu des titres est fixe à 0,5 seconde.</p>
 <p><strong>Sélectionner automatiquement le clip non lu suivant</strong> sélectionne le prochain clip non lu sans démarrer sa lecture.</p>
-<p><strong>Lancer automatiquement les clips pour une lecture continue</strong> enchaîne les médias. Le mode permet d'ignorer les clips déjà lus ou de lire tous les clips.</p>
+<p><strong>Lancer automatiquement les clips pour une lecture continue</strong> enchaîne les médias. On peut choisir d'ignorer les clips déjà lus ou de lire tous les clips.</p>
 
 <h2 id="preview">Preview et Export</h2>
-<p>Preview s'ouvre par défaut en plein écran. Le bouton Mode fenêtré conserve l'écran utilisé. Le menu Fenêtre permet de rappeler Playlist ou Preview au premier plan.</p>
-<p>Export ouvre un sélecteur de dossier, puis crée un fichier MP4 pour chaque duo. La normalisation active est appliquée à l'export.</p>
+<p>Preview s'ouvre par défaut en plein écran.</p>
+<p>Export ouvre une boîte de choix de destination pour les fichiers à exporter.&nbsp;</p><p>Si un fichier exporté existe déjà, l'application demande confirmation avant de le remplacer.</p><p>La normalisation active est appliquée à l'export.</p>
 </main>
-</body>
-</html>
+
+
+</body></html>

@@ -3,10 +3,6 @@ import WebKit
 
 final class HelpWindowController: NSWindowController {
     private var webView: WKWebView?
-    private var editing = false
-    private var editButton: NSButton?
-    private var saveButton: NSButton?
-    private var cancelButton: NSButton?
 
     convenience init() {
         let window = NSWindow(
@@ -15,94 +11,30 @@ final class HelpWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "AD-PLAYER — Mode d'emploi"
+        window.title = "AD Player 26.09 — Mode d'emploi"
         window.minSize = NSSize(width: 480, height: 420)
         self.init(window: window)
 
-        let editButton = NSButton(title: "Modifier", target: nil, action: nil)
-        let saveButton = NSButton(title: "Enregistrer", target: nil, action: nil)
-        let cancelButton = NSButton(title: "Annuler", target: nil, action: nil)
-        self.editButton = editButton
-        self.saveButton = saveButton
-        self.cancelButton = cancelButton
-        editButton.target = self
-        editButton.action = #selector(beginEditing)
-        saveButton.target = self
-        saveButton.action = #selector(saveEditing)
-        cancelButton.target = self
-        cancelButton.action = #selector(cancelEditing)
-        saveButton.isHidden = true
-        cancelButton.isHidden = true
-
-        let toolbar = NSStackView(views: [editButton, saveButton, cancelButton])
-        toolbar.orientation = .horizontal
-        toolbar.spacing = 8
-        toolbar.translatesAutoresizingMaskIntoConstraints = false
-
-        let scrollView = NSScrollView()
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
-
         let contentView = NSView()
         contentView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(toolbar)
 
         let webView = WKWebView()
         self.webView = webView
-        webView.frame = NSRect(x: 0, y: 0, width: 576, height: 1200)
-        webView.autoresizingMask = [.width]
-        if let html = try? String(contentsOf: Self.editableHelpURL, encoding: .utf8) {
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        if let html = try? String(contentsOf: Self.helpURL, encoding: .utf8) {
             webView.loadHTMLString(html, baseURL: nil)
         } else {
             webView.loadHTMLString(Self.fallbackHTML, baseURL: nil)
         }
-        scrollView.documentView = webView
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(scrollView)
+        contentView.addSubview(webView)
         window.contentView = contentView
         NSLayoutConstraint.activate([
-            toolbar.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
-            toolbar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
-            toolbar.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -12),
-            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 8),
-            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
+            webView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
         ])
 
-    }
-
-    @objc private func beginEditing(_ sender: NSButton) {
-        editing = true
-        webView?.evaluateJavaScript("document.body.contentEditable='true'; document.body.style.outline='2px solid #4c9ffe'; document.body.focus();", completionHandler: nil)
-        sender.isHidden = true
-        saveButton?.isHidden = false
-        cancelButton?.isHidden = false
-    }
-
-    @objc private func saveEditing(_ sender: NSButton) {
-        webView?.evaluateJavaScript("document.documentElement.outerHTML") { [weak self] result, _ in
-            guard let self = self, let html = result as? String else { return }
-            try? FileManager.default.createDirectory(at: Self.applicationSupportDirectory, withIntermediateDirectories: true, attributes: nil)
-            try? html.write(to: Self.applicationSupportHelpURL, atomically: true, encoding: .utf8)
-            self.finishEditing(loadSavedContent: true)
-        }
-    }
-
-    @objc private func cancelEditing(_ sender: NSButton) {
-        finishEditing(loadSavedContent: true)
-    }
-
-    private func finishEditing(loadSavedContent: Bool) {
-        editing = false
-        webView?.evaluateJavaScript("document.body.contentEditable='false'; document.body.style.outline='none';", completionHandler: nil)
-        editButton?.isHidden = false
-        saveButton?.isHidden = true
-        cancelButton?.isHidden = true
-        guard loadSavedContent,
-              let html = try? String(contentsOf: Self.editableHelpURL, encoding: .utf8) else { return }
-        webView?.loadHTMLString(html, baseURL: nil)
     }
 
     private static let manualText = """
@@ -115,7 +47,7 @@ final class HelpWindowController: NSWindowController {
 
     RACCOURCIS
 
-    Cmd-O       Choisir un dossier de médias.
+    Cmd-O       Choisir un dossier ou un ou plusieurs fichiers de médias.
     Cmd-R       Ouvrir le tiroir Réglages.
     Échap       Arrêter immédiatement la lecture.
     Espace      Lire, mettre en pause ou reprendre la ligne sélectionnée.
@@ -132,9 +64,9 @@ final class HelpWindowController: NSWindowController {
     CHARGER UN DOSSIER
 
     Déposez un dossier ou des fichiers directement dans la Playlist. Vous pouvez
-    aussi utiliser Cmd-O. Le dernier dossier utilisé est mémorisé et restauré
-    au prochain lancement. Si aucun dossier n'est chargé, déposez simplement
-    vos médias dans la fenêtre.
+    aussi utiliser Cmd-O. Les fichiers MP4, MOV, WAV, MP3, JPG, JPEG et PNG sont
+    acceptés. Le dernier dossier utilisé est mémorisé et restauré au prochain
+    lancement. Si aucun dossier n'est chargé, déposez simplement vos médias.
 
     LES COMMANDES DE LA PLAYLIST
 
@@ -153,6 +85,7 @@ final class HelpWindowController: NSWindowController {
                      Activer la correction de niveau pendant la lecture et l'export.
     Clear viewed     Effacer tous les cercles verts, sans supprimer la liste.
     Clear list       Arrêter la lecture, vider la liste et oublier le dossier.
+    Suppr / Delete   Retirer le média sélectionné; l'icône poubelle fait de même.
 
     Le gros bouton STOP, placé dans le tiroir Réglages, arrête immédiatement
     le média en cours et remet Preview au noir. Échap déclenche la même action.
@@ -209,9 +142,9 @@ final class HelpWindowController: NSWindowController {
     utilisé. Le menu Fenêtre permet de rappeler Playlist ou Preview au premier
     plan.
 
-    Export ouvre un sélecteur de dossier. Après validation, un fichier MP4 est
-    créé pour chaque duo. Le niveau LUFS choisi est appliqué à l'export lorsque
-    Normaliser le LUFS est activé.
+    Export ouvre un sélecteur de destination qui permet de créer un dossier.
+    L'application avertit avant de remplacer un fichier existant. Le niveau
+    LUFS choisi est appliqué à l'export lorsque Normaliser le LUFS est activé.
 
     À PROPOS DE CETTE AIDE
 
@@ -222,21 +155,6 @@ final class HelpWindowController: NSWindowController {
 
     private static var helpURL: URL {
         Bundle.main.url(forResource: "Help", withExtension: "html") ?? URL(fileURLWithPath: "/dev/null")
-    }
-
-    private static var applicationSupportDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("AD-PLAYER", isDirectory: true)
-    }
-
-    private static var applicationSupportHelpURL: URL {
-        applicationSupportDirectory.appendingPathComponent("Help.html")
-    }
-
-    private static var editableHelpURL: URL {
-        FileManager.default.fileExists(atPath: applicationSupportHelpURL.path)
-            ? applicationSupportHelpURL
-            : helpURL
     }
 
     private static let fallbackHTML = """

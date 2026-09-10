@@ -19,12 +19,16 @@ final class MainWindowController: NSWindowController {
     private var playedEntryKeys = Set<String>()
     private var securityScopedPlaylistURL: URL?
     private var automaticTransitionScheduledForIndex: Int?
+    private var exportCancellationToken: PlaylistExporter.CancellationToken?
+    private var exportWasCancelled = false
 
     var engineSettings: PlaybackSettings { engine.settings }
     var isTitleCardEnabled: Bool { engine.showsTitleCardBeforePlayback }
 
     private let tableView = PlaylistTableView()
     private let statusLabel = NSTextField(labelWithString: "Aucun dossier chargé")
+    private let exportProgressIndicator = NSProgressIndicator()
+    private let deleteButton = NSButton(title: "", target: nil, action: nil)
     private let refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
     private let autoRefreshCheckbox = NSButton(checkboxWithTitle: "Auto", target: nil, action: nil)
     private let exportButton = NSButton(title: "Export", target: nil, action: nil)
@@ -54,7 +58,7 @@ final class MainWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "AD-PLAYER — Playlist"
+        window.title = "AD Player 26.09 — Playlist"
         window.minSize = NSSize(width: 360, height: 320)
         super.init(window: window)
         engine.delegate = self
@@ -62,7 +66,11 @@ final class MainWindowController: NSWindowController {
         buildUI()
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard event.keyCode == 53 else { return event }
-            self?.stopButtonClicked()
+            if self?.exportCancellationToken != nil {
+                self?.cancelExport()
+            } else {
+                self?.stopButtonClicked()
+            }
             return nil
         }
     }
@@ -89,7 +97,7 @@ final class MainWindowController: NSWindowController {
 
         let root = RootDropView(frame: window.contentView!.bounds)
         root.autoresizingMask = [.width, .height]
-        root.onFolderDropped = { [weak self] url in self?.loadFolder(url) }
+        root.onURLsDropped = { [weak self] urls in self?.loadDroppedURLs(urls) }
         window.contentView = root
 
         refreshButton.bezelStyle = .rounded
@@ -122,6 +130,14 @@ final class MainWindowController: NSWindowController {
         clearViewedButton.target = self
         clearViewedButton.action = #selector(clearViewedButtonClicked)
         clearViewedButton.translatesAutoresizingMaskIntoConstraints = false
+
+        deleteButton.image = NSImage(systemSymbolName: "trash", accessibilityDescription: "Supprimer")
+        deleteButton.imagePosition = .imageOnly
+        deleteButton.bezelStyle = .texturedRounded
+        deleteButton.toolTip = "Supprimer le média sélectionné (Suppr)"
+        deleteButton.target = self
+        deleteButton.action = #selector(deleteSelectedMedia)
+        deleteButton.translatesAutoresizingMaskIntoConstraints = false
 
         stopButton.bezelStyle = .regularSquare
         let stopSymbolConfiguration = NSImage.SymbolConfiguration(pointSize: 28, weight: .bold)
@@ -187,12 +203,21 @@ final class MainWindowController: NSWindowController {
         tableView.allowsMultipleSelection = false
         tableView.allowsEmptySelection = true
         tableView.onSpace = { [weak self] in self?.spacePressed() }
+        tableView.onDelete = { [weak self] in self?.deleteSelectedMedia() }
         scrollView.documentView = tableView
 
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.font = NSFont.systemFont(ofSize: 11)
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.lineBreakMode = .byTruncatingMiddle
+
+        exportProgressIndicator.isIndeterminate = false
+        exportProgressIndicator.minValue = 0
+        exportProgressIndicator.maxValue = 1
+        exportProgressIndicator.doubleValue = 0
+        exportProgressIndicator.isHidden = true
+        exportProgressIndicator.toolTip = "Progression de l'export"
+        exportProgressIndicator.translatesAutoresizingMaskIntoConstraints = false
 
         let statusBarSeparator = NSBox()
         statusBarSeparator.boxType = .separator
@@ -204,6 +229,7 @@ final class MainWindowController: NSWindowController {
         root.addSubview(displayModeButton)
         root.addSubview(clearListButton)
         root.addSubview(clearViewedButton)
+        root.addSubview(deleteButton)
         root.addSubview(filterCheckbox)
         root.addSubview(titleCardCheckbox)
         root.addSubview(audioTitleCheckbox)
@@ -219,6 +245,7 @@ final class MainWindowController: NSWindowController {
         root.addSubview(emptyListLabel)
         root.addSubview(statusBarSeparator)
         root.addSubview(statusLabel)
+        root.addSubview(exportProgressIndicator)
 
         NSLayoutConstraint.activate([
             refreshButton.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
@@ -272,8 +299,16 @@ final class MainWindowController: NSWindowController {
             statusBarSeparator.bottomAnchor.constraint(equalTo: statusLabel.topAnchor, constant: -6),
 
             statusLabel.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
-            statusLabel.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
-            statusLabel.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10)
+            statusLabel.trailingAnchor.constraint(equalTo: exportProgressIndicator.leadingAnchor, constant: -8),
+            statusLabel.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10),
+            exportProgressIndicator.trailingAnchor.constraint(equalTo: deleteButton.leadingAnchor, constant: -8),
+            exportProgressIndicator.centerYAnchor.constraint(equalTo: statusLabel.centerYAnchor),
+            exportProgressIndicator.widthAnchor.constraint(equalToConstant: 140),
+            exportProgressIndicator.heightAnchor.constraint(equalToConstant: 12),
+            deleteButton.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
+            deleteButton.centerYAnchor.constraint(equalTo: statusLabel.centerYAnchor),
+            deleteButton.widthAnchor.constraint(equalToConstant: 28),
+            deleteButton.heightAnchor.constraint(equalToConstant: 24)
         ])
     }
 
@@ -322,6 +357,28 @@ final class MainWindowController: NSWindowController {
         tableView.reloadData()
     }
 
+    @objc private func deleteSelectedMedia() {
+        guard tableView.selectedRow >= 0,
+              visibleIndices.indices.contains(tableView.selectedRow) else { return }
+        removeMedia(at: visibleIndices[tableView.selectedRow])
+    }
+
+    private func removeMedia(at index: Int) {
+        guard playlist.indices.contains(index) else { return }
+        if engine.playingIndex == index {
+            engine.stop()
+        }
+        let identityKey = playlist[index].identityKey
+        playlist.remove(at: index)
+        playedEntryKeys.remove(identityKey)
+        UserDefaults.standard.set(Array(playedEntryKeys), forKey: playedEntriesKey)
+        currentIndex = nil
+        recomputeVisibleIndices()
+        tableView.reloadData()
+        tableView.deselectAll(nil)
+        updateEmptyListState()
+    }
+
     @objc private func filterToggled() {
         displayFilterEnabled = (filterCheckbox.state == .on)
         recomputeVisibleIndices()
@@ -366,13 +423,49 @@ final class MainWindowController: NSWindowController {
     @objc func openPlaylistFromMenu() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = MediaItem.allowedContentTypes
+        panel.allowsMultipleSelection = true
         panel.prompt = "Ouvrir"
         panel.beginSheetModal(for: window!) { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
-            self?.loadFolder(url)
+            guard response == .OK else { return }
+            self?.loadDroppedURLs(panel.urls)
         }
+    }
+
+    private func loadDroppedURLs(_ urls: [URL]) {
+        guard let firstURL = urls.first else { return }
+        var isDirectory: ObjCBool = false
+        if urls.count == 1,
+           FileManager.default.fileExists(atPath: firstURL.path, isDirectory: &isDirectory),
+           isDirectory.boolValue {
+            loadFolder(firstURL)
+        } else {
+            let mediaURLs = urls.flatMap { url -> [URL] in
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return [] }
+                if isDirectory.boolValue {
+                    return (try? FileManager.default.contentsOfDirectory(
+                        at: url,
+                        includingPropertiesForKeys: nil,
+                        options: [.skipsHiddenFiles]
+                    )) ?? []
+                }
+                return [url]
+            }
+            loadMediaURLs(mediaURLs)
+        }
+    }
+
+    private func loadMediaURLs(_ urls: [URL]) {
+        let newEntries = PlaylistEntry.buildEntries(fromURLs: urls)
+        guard !newEntries.isEmpty else { return }
+
+        playlist.append(contentsOf: newEntries)
+        recomputeVisibleIndices()
+        tableView.reloadData()
+        updateEmptyListState()
+        statusLabel.stringValue = "\(playlist.count) média(s) dans la playlist"
     }
 
     private func loadFolder(_ url: URL, preservingSecurityScope: Bool = false) {
@@ -469,6 +562,10 @@ final class MainWindowController: NSWindowController {
     // MARK: - Export (paired/red entries -> single .mp4 per entry)
 
     @objc private func exportButtonClicked() {
+        if exportCancellationToken != nil {
+            cancelExport()
+            return
+        }
         guard playlist.contains(where: { $0.isPaired }) else {
             let alert = NSAlert()
             alert.messageText = "Aucun fichier composé (liseré rouge) à exporter."
@@ -481,35 +578,96 @@ final class MainWindowController: NSWindowController {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
         panel.prompt = "Exporter ici"
         panel.beginSheetModal(for: window!) { [weak self] response in
             guard response == .OK, let folder = panel.url else { return }
-            self?.beginExport(to: folder)
+            self?.confirmExport(to: folder)
         }
     }
 
-    private func beginExport(to folder: URL) {
+    private func confirmExport(to folder: URL) {
+        let existing = playlist.compactMap { entry -> URL? in
+            guard case .pairedVideoAudio(let name, _, _) = entry else { return nil }
+            let url = folder.appendingPathComponent(name).appendingPathExtension("mp4")
+            return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        }
+        guard !existing.isEmpty else {
+            beginExport(to: folder)
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Des fichiers existent déjà"
+        alert.informativeText = "\(existing.count) fichier(s) seront remplacés si vous continuez."
+        alert.addButton(withTitle: "Remplacer")
+        alert.addButton(withTitle: "Annuler")
+        alert.alertStyle = .warning
+        alert.beginSheetModal(for: window!) { [weak self] response in
+            if response == .alertFirstButtonReturn {
+                self?.beginExport(to: folder, replacingExisting: true)
+            }
+        }
+    }
+
+    private func beginExport(to folder: URL, replacingExisting: Bool = false) {
+        if replacingExisting {
+            for entry in playlist {
+                guard case .pairedVideoAudio(let name, _, _) = entry else { continue }
+                let outputURL = folder.appendingPathComponent(name).appendingPathExtension("mp4")
+                try? FileManager.default.removeItem(at: outputURL)
+            }
+        }
         exportButton.isEnabled = false
+        exportWasCancelled = false
+        exportButton.title = "Annuler"
+        exportButton.isEnabled = true
+        exportProgressIndicator.doubleValue = 0
+        exportProgressIndicator.isHidden = false
         let restoredStatus = loadedFolderURL?.path ?? statusLabel.stringValue
 
-        PlaylistExporter.exportPairedEntries(
+        exportCancellationToken = PlaylistExporter.exportPairedEntries(
             playlist,
             to: folder,
-            loudnessNormalizationEnabled: loudnessCheckbox.state == .on,
+            loudnessNormalizationEnabled: engine.loudnessNormalizationEnabled,
             targetLUFS: engine.settings.targetLUFS,
-            progress: { [weak self] name, completed, total, error in
+            progress: { [weak self] name, completed, total, fraction, error in
                 guard let self = self else { return }
+                let overallProgress = total > 0
+                    ? (Double(completed) + min(1, max(0, fraction))) / Double(total)
+                    : 1
+                self.exportProgressIndicator.doubleValue = overallProgress
+                let percent = Int((overallProgress * 100).rounded())
                 if let error = error {
-                    self.statusLabel.stringValue = "Export \(completed)/\(total) — erreur sur \(name) : \(error.localizedDescription)"
+                    self.statusLabel.stringValue = "Export \(percent)% — erreur sur \(name) : \(error.localizedDescription)"
                 } else {
-                    self.statusLabel.stringValue = "Export \(completed)/\(total) — \(name) terminé"
+                    self.statusLabel.stringValue = fraction >= 1
+                        ? "Export \(percent)% — \(name) terminé"
+                        : "Export \(percent)% — \(name)"
                 }
             }, completion: { [weak self] in
                 guard let self = self else { return }
+                let wasCancelled = self.exportWasCancelled
+                self.exportCancellationToken = nil
+                self.exportButton.title = "Export"
                 self.exportButton.isEnabled = true
-                self.statusLabel.stringValue = restoredStatus
+                self.exportProgressIndicator.doubleValue = 1
+                self.statusLabel.stringValue = wasCancelled ? "Export annulé" : restoredStatus
+                if !wasCancelled {
+                    let alert = NSAlert()
+                    alert.messageText = "Export terminé."
+                    alert.alertStyle = .informational
+                    alert.addButton(withTitle: "OK")
+                    alert.beginSheetModal(for: self.window!)
+                }
             }
         )
+    }
+
+    private func cancelExport() {
+        guard exportCancellationToken != nil else { return }
+        exportWasCancelled = true
+        exportCancellationToken?.cancel()
+        statusLabel.stringValue = "Annulation de l'export…"
     }
 
     // MARK: - Playback control

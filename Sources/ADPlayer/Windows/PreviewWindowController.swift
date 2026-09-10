@@ -25,7 +25,7 @@ final class PreviewWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "AD-PLAYER — Preview"
+        window.title = "AD Player 26.09 — Preview"
         window.isReleasedWhenClosed = false
         window.backgroundColor = .black
         window.hasShadow = false

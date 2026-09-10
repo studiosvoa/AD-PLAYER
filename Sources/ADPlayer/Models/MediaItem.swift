@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 enum MediaType {
     case video
@@ -10,10 +11,13 @@ struct MediaItem: Equatable {
     let url: URL
     let type: MediaType
 
-    var displayName: String { url.lastPathComponent }
+    var displayName: String {
+        type == .audio ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent
+    }
 
     /// Extensions accepted by the player.
     static let allowedExtensions: Set<String> = ["mp4", "mov", "wav", "mp3", "jpg", "jpeg", "png"]
+    static let allowedContentTypes: [UTType] = [.mpeg4Movie, .quickTimeMovie, .wav, .mp3, .jpeg, .png]
 
     init?(url: URL) {
         let ext = url.pathExtension.lowercased()

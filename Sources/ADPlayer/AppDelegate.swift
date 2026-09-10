@@ -1,5 +1,25 @@
 import Cocoa
 
+private final class RepeatingStepper: NSStepper {
+    override func mouseDown(with event: NSEvent) {
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] timer in
+            guard let self = self, let window = self.window else {
+                timer.invalidate()
+                return
+            }
+            let point = self.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+            let direction = point.y >= bounds.midY ? 1.0 : -1.0
+            let nextValue = Swift.min(maxValue, Swift.max(minValue, doubleValue + direction * increment))
+            guard nextValue != doubleValue else { return }
+            doubleValue = nextValue
+            sendAction(action, to: target)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        defer { timer.invalidate() }
+        super.mouseDown(with: event)
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: MainWindowController!
     private var previewWindowController: PreviewWindowController!
@@ -61,23 +81,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func installMainMenu() {
         let menu = NSMenu()
 
-        let appItem = NSMenuItem(title: "AD-PLAYER", action: nil, keyEquivalent: "")
+        let appItem = NSMenuItem(title: "AD Player 26.09", action: nil, keyEquivalent: "")
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Quitter AD-PLAYER", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        appItem.submenu = appMenu
-        menu.addItem(appItem)
 
-        let settingsItem = NSMenuItem(title: "Réglages…", action: #selector(showOptions), keyEquivalent: "r")
-        settingsItem.target = self
-        appMenu.addItem(settingsItem)
+        let helpItem = NSMenuItem(title: "Aide", action: #selector(showHelp), keyEquivalent: "h")
+        helpItem.target = self
+        appMenu.addItem(helpItem)
 
         let openItem = NSMenuItem(title: "Ouvrir…", action: #selector(MainWindowController.openPlaylistFromMenu), keyEquivalent: "o")
         openItem.target = mainWindowController
         appMenu.addItem(openItem)
 
-        let helpItem = NSMenuItem(title: "Aide", action: #selector(showHelp), keyEquivalent: "")
-        helpItem.target = self
-        appMenu.addItem(helpItem)
+        let settingsItem = NSMenuItem(title: "Réglages…", action: #selector(showOptions), keyEquivalent: "r")
+        settingsItem.target = self
+        appMenu.addItem(settingsItem)
+
+        appMenu.addItem(withTitle: "Quitter AD Player 26.09", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu = appMenu
+        menu.addItem(appItem)
 
         let windowItem = NSMenuItem()
         let windowMenu = NSMenu(title: "Fenêtre")
@@ -116,7 +137,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showOptions() {
         if let settingsDrawer = settingsDrawer {
-            settingsDrawer.open()
+            if settingsDrawer.state == 2 {
+                closeSettingsPanel()
+            } else {
+                settingsDrawer.open()
+            }
             return
         }
 
@@ -221,7 +246,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         field.action = #selector(numericFieldChanged(_:))
         numericFields[index] = field
 
-        let stepper = NSStepper()
+        let stepper = RepeatingStepper()
         stepper.doubleValue = boundedValue
         stepper.minValue = min
         stepper.maxValue = max
